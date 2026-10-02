@@ -1074,9 +1074,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (res.ok) {
                         card.remove();
                         loadTrending();
+                        showToast('Đã xóa bài viết thành công!');
                     } else {
-                        const err = await res.json();
-                        alert(err.error || 'Lỗi khi xóa bài');
+                        const err = await res.json().catch(() => ({}));
+                        const msg = err.error || err.detail || (res.status === 401 ? 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại' : 'Lỗi khi xóa bài');
+                        alert(msg);
                     }
                 } catch (e) {
                     alert('Lỗi kết nối khi xóa bài');

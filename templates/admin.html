@@ -559,8 +559,14 @@
                     `;
                     tr.querySelector('.del-post-btn').addEventListener('click', async () => {
                         if (!confirm(`Xác nhận xóa bài viết #${p.id}?`)) return;
-                        await apiFetch(`/api/posts/${p.id}`, { method: 'DELETE' });
-                        loadAllAdminData();
+                        const res = await apiFetch(`/api/posts/${p.id}`, { method: 'DELETE' });
+                        if (res.ok) {
+                            showToast('Đã xóa bài viết!');
+                            loadAllAdminData();
+                        } else {
+                            const err = await res.json().catch(() => ({}));
+                            alert(err.error || err.detail || 'Lỗi khi xóa bài');
+                        }
                     });
                     tbody.appendChild(tr);
                 });

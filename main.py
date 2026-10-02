@@ -707,29 +707,44 @@ async def delete_post(post_id: int, request: Request):
     user = require_current_user(request)
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT user_id, media_url FROM posts WHERE id = ?", (post_id,))
-    post = cursor.fetchone()
-    if not post:
-        conn.close()
-        return JSONResponse(content={"error": "Bài viết không tồn tại"}, status_code=404)
+    try:
+        cursor.execute("SELECT id, user_id, media_url FROM posts WHERE id = ?", (post_id,))
+        post = cursor.fetchone()
+        if not post:
+            return JSONResponse(content={"error": "Bài viết không tồn tại hoặc đã bị xóa trước đó"}, status_code=404)
 
-    if post["user_id"] != user["id"] and user.get("role") != "admin":
-        conn.close()
-        return JSONResponse(content={"error": "Bạn không có quyền xóa bài viết này"}, status_code=403)
+        # Kiểm tra quyền: tác giả bài viết hoặc admin
+        is_owner = int(post["user_id"]) == int(user["id"])
+        is_admin = str(user.get("role", "")).lower() == "admin"
+        if not is_owner and not is_admin:
+            return JSONResponse(content={"error": "Bạn không có quyền xóa bài viết của người khác"}, status_code=403)
 
-    if post["media_url"] and post["media_url"].startswith("/uploads/"):
-        rel_path = post["media_url"].replace("/uploads/", "")
-        disk_path = os.path.join(UPLOAD_DIR, rel_path)
-        if os.path.exists(disk_path):
-            try:
-                os.remove(disk_path)
-            except Exception:
-                pass
+        # Xóa file vật lý liên kết nếu có
+        if post["media_url"] and str(post["media_url"]).startswith("/uploads/"):
+            rel_path = str(post["media_url"]).replace("/uploads/", "")
+            disk_path = os.path.join(UPLOAD_DIR, rel_path)
+            if os.path.exists(disk_path):
+                try:
+                    os.remove(disk_path)
+                except Exception:
+                    pass
 
-    cursor.execute("DELETE FROM posts WHERE id = ?", (post_id,))
-    conn.commit()
-    conn.close()
-    return JSONResponse(content={"status": "ok", "message": "Đã xóa bài viết thành công"})
+        # Xóa sạch các bảng phụ thuộc trước để tránh lỗi Foreign Key
+        cursor.execute("DELETE FROM post_likes WHERE post_id = ?", (post_id,))
+        cursor.execute("DELETE FROM post_views WHERE post_id = ?", (post_id,))
+        cursor.execute("DELETE FROM comments WHERE post_id = ?", (post_id,))
+        cursor.execute("DELETE FROM posts WHERE id = ?", (post_id,))
+        conn.commit()
+        return JSONResponse(content={"status": "ok", "message": "Đã xóa bài viết thành công"})
+    except Exception as e:
+        conn.rollback()
+        print("Lỗi khi xóa bài viết:", e)
+        return JSONResponse(content={"error": f"Lỗi máy chủ khi xóa bài: {str(e)}"}, status_code=500)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 # --- STORIES API ---
 @app.get("/api/stories")
