@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumina — Mạng Xã Hội Đẳng Cấp</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="dark-theme">
+    <!-- Ambient Background Glows -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+
+    <div class="app-layout">
+        <!-- LEFT SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon" id="sidebarBrandIcon"><i class="fa-solid fa-bolt"></i></div>
+                <span class="brand-name" id="sidebarBrandName">Lumina</span>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-view="feed"><i class="fa-solid fa-house"></i> <span>Trang chủ</span></button>
+                <button class="nav-item" data-view="explore"><i class="fa-solid fa-compass"></i> <span>Khám phá</span></button>
+                <button class="nav-item" id="openCreatePostBtn"><i class="fa-solid fa-circle-plus"></i> <span>Đăng bài</span></button>
+                <button class="nav-item" id="openCreateStoryBtn"><i class="fa-solid fa-circle-play"></i> <span>Đăng Story</span></button>
+                <button class="nav-item" id="profileNavBtn" data-view="profile"><i class="fa-solid fa-user"></i> <span>Cá nhân</span></button>
+                <button class="nav-item user-only" id="sidebarSettingsBtn" style="display: none;"><i class="fa-solid fa-gear"></i> <span>Cài đặt & Hỗ trợ</span></button>
+                <a href="/admin" class="nav-item admin-only" id="adminNavBtn" style="display: none; text-decoration: none;"><i class="fa-solid fa-shield-halved"></i> <span>Quản trị (Admin)</span></a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-pill" id="userPill" style="display: none;">
+                    <img id="pillAvatar" src="/static/default-avatar.svg" alt="Avatar" class="avatar-small">
+                    <div class="pill-info">
+                        <span class="pill-name" id="pillName">Tên người dùng</span>
+                        <span class="pill-handle" id="pillUsername">@username</span>
+                    </div>
+                    <button id="logoutBtn" title="Đăng xuất" class="logout-icon-btn"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+                </div>
+                <button id="loginPromptBtn" class="btn-primary w-full"><i class="fa-solid fa-right-to-bracket"></i> Đăng nhập</button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            <!-- HEADER MOBILE ONLY -->
+            <header class="mobile-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="brand-icon small" id="mobileBrandIcon"><i class="fa-solid fa-bolt"></i></div>
+                    <span class="brand-name" id="mobileBrandName">Lumina</span>
+                </div>
+                <div class="mobile-actions">
+                    <a href="/admin" class="icon-circle admin-only" id="mobileAdminBtn" style="display:none; text-decoration: none;"><i class="fa-solid fa-shield-halved"></i></a>
+                    <button id="mobileCreateBtn" class="icon-circle"><i class="fa-solid fa-plus"></i></button>
+                    <button id="mobileAuthBtn" class="icon-circle"><i class="fa-solid fa-user"></i></button>
+                </div>
+            </header>
+
+            <!-- Active Tag Filter Badge -->
+            <div id="activeTagBanner" class="active-tag-banner" style="display: none;">
+                <span>Đang lọc theo: <strong id="currentTagName">#tag</strong></span>
+                <button id="clearTagFilterBtn"><i class="fa-solid fa-xmark"></i> Bỏ lọc</button>
+            </div>
+
+            <!-- FEED VIEW -->
+            <section id="feedView" class="view-section active">
+                <!-- STORIES CAROUSEL -->
+                <div class="stories-wrapper glass-card">
+                    <div class="stories-scroll" id="storiesScroll">
+                        <!-- Add Story Item -->
+                        <div class="story-item create-story-trigger" id="addStoryTrigger">
+                            <div class="story-ring add-ring">
+                                <i class="fa-solid fa-plus"></i>
+                            </div>
+                            <span class="story-author">Tạo Story</span>
+                        </div>
+                        <!-- Dynamic Stories loaded here -->
+                        <div id="storiesList" class="stories-dynamic-row"></div>
+                    </div>
+                </div>
+
+                <!-- QUICK CREATE POST BOX -->
+                <div class="quick-post-box glass-card" id="quickPostBox">
+                    <div class="quick-post-top">
+                        <img id="quickPostAvatar" src="/static/default-avatar.svg" class="avatar-mid" alt="Avatar">
+                        <textarea id="quickPostText" placeholder="Bạn đang nghĩ gì? Chia sẻ câu chuyện, gắn #hashtag, ảnh, video hay bài nhạc yêu thích..." rows="2"></textarea>
+                    </div>
+                    
+                    <div id="quickMediaPreview" class="media-preview-container" style="display: none;">
+                        <button id="removeMediaBtn" class="remove-media-btn"><i class="fa-solid fa-xmark"></i></button>
+                        <div id="mediaPreviewContent"></div>
+                    </div>
+
+                    <div class="quick-post-bottom">
+                        <div class="media-upload-options">
+                            <label class="media-btn" title="Thêm ảnh">
+                                <i class="fa-solid fa-image" style="color: #38bdf8;"></i> <span>Ảnh</span>
+                                <input type="file" id="postImageInput" accept="image/*" hidden>
+                            </label>
+                            <label class="media-btn" title="Thêm video">
+                                <i class="fa-solid fa-video" style="color: #f43f5e;"></i> <span>Video</span>
+                                <input type="file" id="postVideoInput" accept="video/*" hidden>
+                            </label>
+                            <label class="media-btn" title="Thêm âm nhạc / audio">
+                                <i class="fa-solid fa-music" style="color: #a855f7;"></i> <span>Nhạc / Audio</span>
+                                <input type="file" id="postAudioInput" accept="audio/*" hidden>
+                            </label>
+                        </div>
+
+                        <div class="post-controls-right">
+                            <!-- Privacy Selector -->
+                            <select id="postPrivacySelect" class="privacy-select" title="Quyền riêng tư">
+                                <option value="public">🌐 Công khai</option>
+                                <option value="private">🔒 Chỉ mình tôi</option>
+                            </select>
+                            <button id="publishPostBtn" class="btn-primary"><i class="fa-solid fa-paper-plane"></i> Đăng</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POSTS FEED -->
+                <div class="posts-feed" id="postsFeed">
+                    <!-- Posts will be dynamically rendered here -->
+                    <div class="feed-loader" id="feedLoader">
+                        <div class="spinner"></div>
+                        <p>Đang tải nguồn cấp dữ liệu...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PROFILE VIEW -->
+            <section id="profileView" class="view-section" style="display: none;">
+                <!-- Back button when viewing other user's profile -->
+                <div id="profileBackNav" style="display: none; margin-bottom: 14px;">
+                    <button id="backFromProfileBtn" class="btn-secondary" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--radius-full); font-size: 13px;">
+                        <i class="fa-solid fa-arrow-left"></i> Quay lại Bảng tin
+                    </button>
+                </div>
+
+                <div class="profile-card glass-card">
+                    <!-- Profile Cover Banner -->
+                    <div class="profile-cover">
+                        <div class="profile-cover-mesh"></div>
+                    </div>
+                    
+                    <div class="profile-header-body">
+                        <!-- Profile Avatar Wrapper with Instant Upload -->
+                        <div class="profile-avatar-wrap">
+                            <div class="profile-avatar-inner">
+                                <img id="profileAvatar" src="/static/default-avatar.svg" alt="Avatar">
+                                <div class="avatar-loading-overlay" id="avatarLoadingOverlay" style="display: none;">
+                                    <div class="spinner small"></div>
+                                </div>
+                            </div>
+                            <label class="avatar-camera-btn" id="avatarCameraBtn" title="Cập nhật ảnh đại diện">
+                                <i class="fa-solid fa-camera"></i>
+                                <input type="file" id="avatarFileInput" accept="image/*" hidden>
+                            </label>
+                        </div>
+
+                        <!-- Profile Info & Actions -->
+                        <div class="profile-info-content">
+                            <div class="profile-top-line">
+                                <div class="profile-titles">
+                                    <div class="profile-name-row">
+                                        <h2 id="profileDisplayName">Người dùng</h2>
+                                        <span class="role-badge" id="profileRole">Thành viên</span>
+                                    </div>
+                                    <div class="profile-meta-row">
+                                        <span class="profile-handle" id="profileUsername">@username</span>
+                                        <span class="profile-dot">•</span>
+                                        <span class="profile-join-date" id="profileJoinDate"><i class="fa-regular fa-calendar-days"></i> Thành viên mới</span>
+                                    </div>
+                                </div>
+
+                                <div class="profile-action-buttons">
+                                    <!-- Buttons when viewing other user -->
+                                    <button id="profileFollowBtn" class="btn-primary profile-btn" style="display: none;">
+                                        <i class="fa-solid fa-user-plus" id="profileFollowIcon"></i> 
+                                        <span id="profileFollowText">Theo dõi</span>
+                                    </button>
+
+                                    <!-- Buttons when viewing own profile -->
+                                    <div id="selfProfileActions" style="display: inline-flex; gap: 8px; flex-wrap: wrap;">
+                                        <button id="openEditProfileBtn" class="btn-secondary profile-btn"><i class="fa-solid fa-user-pen"></i> <span>Chỉnh sửa</span></button>
+                                        <button id="openVerificationProfileBtn" class="btn-secondary profile-btn" style="border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;" title="Xin cấp hoặc xem trạng thái Tích Xanh"><i class="fa-solid fa-circle-check"></i> <span>Tích xanh</span></button>
+                                        <button id="openSettingsBtn" class="btn-secondary profile-btn"><i class="fa-solid fa-gear"></i> <span>Cài đặt</span></button>
+                                        <button id="profileLogoutBtn" class="btn-danger-outline profile-btn" title="Đăng xuất"><i class="fa-solid fa-arrow-right-from-bracket"></i> <span>Đăng xuất</span></button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p class="profile-bio" id="profileBio">Chưa có tiểu sử giới thiệu.</p>
+                            
+                            <div class="profile-stats">
+                                <div class="stat-item"><strong id="profilePostsCount">0</strong> <span>bài viết</span></div>
+                                <div class="stat-item"><strong id="profileFollowersCount">0</strong> <span>người theo dõi</span></div>
+                                <div class="stat-item"><strong id="profileFollowingCount">0</strong> <span>đang theo dõi</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Profile Tabs -->
+                    <div class="profile-tabs-nav">
+                        <button class="profile-tab-item active" data-ptab="all"><i class="fa-solid fa-table-cells"></i> <span>Bài viết</span></button>
+                        <button class="profile-tab-item" data-ptab="media"><i class="fa-solid fa-photo-film"></i> <span>Ảnh & Video</span></button>
+                        <button class="profile-tab-item" data-ptab="liked"><i class="fa-solid fa-heart"></i> <span>Đã thích</span></button>
+                    </div>
+                </div>
+
+                <div id="userPostsFeed" class="posts-feed" style="margin-top: 20px;"></div>
+            </section>
+        </main>
+
+        <!-- RIGHT SIDEBAR (DESKTOP) -->
+        <aside class="right-sidebar">
+            <!-- GỢI Ý BẠN BÈ & THEO DÕI -->
+            <div class="glass-card widget-card">
+                <div class="widget-header">
+                    <h4><i class="fa-solid fa-user-group" style="color: #38bdf8;"></i> Gợi Ý Bạn Bè & Kết Nối</h4>
+                </div>
+                <div class="suggestions-list" id="suggestionsList">
+                    <div class="feed-loader" style="padding: 10px;"><div class="spinner small"></div></div>
+                </div>
+            </div>
+
+            <div class="glass-card widget-card">
+                <div class="widget-header">
+                    <h4><i class="fa-solid fa-arrow-trend-up" style="color: #6366f1;"></i> Xu Hướng & Hashtag Thật (#)</h4>
+                </div>
+                <div class="trends-list" id="trendingList">
+                    <!-- Dynamic hashtags from real posts -->
+                    <div class="feed-loader" style="padding: 10px;"><div class="spinner small"></div></div>
+                </div>
+            </div>
+
+            <div class="glass-card widget-card">
+                <div class="widget-header">
+                    <h4><i class="fa-solid fa-shield"></i> Trạng Thái Hệ Thống</h4>
+                </div>
+                <div class="system-stats-mini">
+                    <div class="mini-stat-row">
+                        <span>Cơ sở dữ liệu:</span>
+                        <strong>SQLite (Tự Động Lưu)</strong>
+                    </div>
+                    <div class="mini-stat-row">
+                        <span>Lượt xem thật:</span>
+                        <strong style="color: #10b981;">100% Real Tracking</strong>
+                    </div>
+                    <div class="mini-stat-row">
+                        <span>Bình luận & Reply:</span>
+                        <strong>Đa cấp độ</strong>
+                    </div>
+                    <div class="mini-stat-row">
+                        <span>Trang Quản trị:</span>
+                        <a href="/admin" style="color: var(--primary); text-decoration: none; font-weight: 700;">/admin 🔗</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer-links">
+                <p id="footerCopyright">© 2026 Lumina Social Network. All rights reserved.</p>
+            </div>
+        </aside>
+    </div>
+
+    <!-- MOBILE BOTTOM NAVIGATION BAR -->
+    <nav class="mobile-bottom-nav">
+        <button class="mobile-nav-item active" data-view="feed"><i class="fa-solid fa-house"></i><span>Trang chủ</span></button>
+        <button class="mobile-nav-item" data-view="explore"><i class="fa-solid fa-compass"></i><span>Khám phá</span></button>
+        <button class="mobile-nav-item mobile-post-btn" id="mobileBottomCreateBtn"><i class="fa-solid fa-plus"></i></button>
+        <button class="mobile-nav-item" id="mobileBottomStoryBtn"><i class="fa-solid fa-circle-play"></i><span>Story</span></button>
+        <button class="mobile-nav-item" data-view="profile"><i class="fa-solid fa-user"></i><span>Cá nhân</span></button>
+    </nav>
+
+    <!-- MODAL: AUTHENTICATION (LOGIN / REGISTER) -->
+    <div class="modal-overlay" id="authModal" style="display: none;">
+        <div class="modal-box glass-card auth-modal-box">
+            <button class="modal-close-btn" id="closeAuthModal"><i class="fa-solid fa-xmark"></i></button>
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="loginTab">Đăng nhập</button>
+                <button class="auth-tab" data-tab="registerTab">Đăng ký</button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" class="auth-form active">
+                <div class="input-group">
+                    <label>Tên đăng nhập hoặc Email</label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-user"></i>
+                        <input type="text" id="loginAccount" required placeholder="nhập username hoặc email">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Mật khẩu</label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-lock"></i>
+                        <input type="password" id="loginPassword" required placeholder="nhập mật khẩu">
+                    </div>
+                </div>
+                <div id="loginError" class="auth-error-msg" style="display: none;"></div>
+                <button type="submit" class="btn-primary w-full">Đăng nhập ngay</button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="registerForm" class="auth-form" style="display: none;">
+                <div class="input-group">
+                    <label>Tên hiển thị</label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-signature"></i>
+                        <input type="text" id="regDisplayName" required placeholder="ví dụ: Nguyễn Văn A">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Tên đăng nhập (Username)</label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-at"></i>
+                        <input type="text" id="regUsername" required placeholder="ví dụ: nguyenvana">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Email</label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-envelope"></i>
+                        <input type="email" id="regEmail" required placeholder="email@gmail.com">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Mật khẩu</label>
+                    <div class="input-with-icon">
+                        <i class="fa-solid fa-lock"></i>
+                        <input type="password" id="regPassword" required placeholder="tối thiểu 6 ký tự">
+                    </div>
+                </div>
+                <div id="registerError" class="auth-error-msg" style="display: none;"></div>
+                <button type="submit" class="btn-primary w-full">Tạo tài khoản</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: CREATE STORY -->
+    <div class="modal-overlay" id="createStoryModal" style="display: none;">
+        <div class="modal-box glass-card story-modal-box">
+            <button class="modal-close-btn" id="closeStoryModal"><i class="fa-solid fa-xmark"></i></button>
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-camera-retro" style="color: var(--primary);"></i> Tạo Story 24h Mới</h3>
+            </div>
+            <form id="createStoryForm">
+                <div class="story-upload-dropzone" id="storyDropzone">
+                    <i class="fa-solid fa-cloud-arrow-up" style="font-size: 32px; color: var(--primary); margin-bottom: 8px;"></i>
+                    <p style="font-weight: 700; margin-bottom: 4px;">Chọn ảnh hoặc video (ngắn / dài đều được)</p>
+                    <span style="font-size: 11.5px; color: var(--text-muted);">Hỗ trợ MP4, WEBM, MOV, JPG, PNG, WEBP, GIF</span>
+                    <input type="file" id="storyFileInput" accept="image/*,video/*" hidden required>
+                    <div id="storyFilePreview" class="story-preview-container"></div>
+                </div>
+                
+                <div class="input-group" style="margin-top: 15px;">
+                    <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; display: block;">
+                        <i class="fa-solid fa-lock"></i> Quyền xem Story
+                    </label>
+                    <select id="storyPrivacySelect" class="form-select" style="width: 100%; padding: 11px 14px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); font-size: 13.5px; outline: none;">
+                        <option value="public" style="background:#181926;">🌍 Công khai (Tất cả mọi người đều xem được)</option>
+                        <option value="followers" style="background:#181926;">👥 Bạn bè & Người theo dõi (Chỉ ai fl mới xem được)</option>
+                    </select>
+                </div>
+
+                <div class="input-group" style="margin-top: 12px;">
+                    <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; display: block;">
+                        <i class="fa-solid fa-pen"></i> Chú thích Story (Tùy chọn)
+                    </label>
+                    <input type="text" id="storyCaption" placeholder="Viết vài dòng chia sẻ khoảnh khắc này...">
+                </div>
+
+                <button type="submit" class="btn-primary w-full" id="submitStoryBtn" style="padding: 12px; font-weight: 700; margin-top: 6px;">
+                    <i class="fa-solid fa-paper-plane"></i> Đăng Story Ngay
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: STORY VIEWER (FULLSCREEN VIEWER) -->
+    <div class="modal-overlay story-viewer-overlay" id="storyViewerModal" style="display: none;">
+        <div class="story-viewer-container">
+            <!-- Story Progress Bars -->
+            <div class="story-progress-bar-container" id="storyProgressBars"></div>
+
+            <!-- Story Header -->
+            <div class="story-viewer-header">
+                <div class="story-user-info" id="storyHeaderUserInfo" style="cursor: pointer;">
+                    <img id="viewerAvatar" src="/static/default-avatar.svg" class="avatar-small">
+                    <div>
+                        <span id="viewerUsername" class="viewer-name">username</span>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span id="viewerTime" class="viewer-time">vừa xong</span>
+                            <span id="viewerPrivacyTag" class="story-privacy-tag" title="Quyền xem story">
+                                <i class="fa-solid fa-globe"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="story-header-actions">
+                    <button id="storySoundBtn" class="story-action-btn" title="Bật/Tắt âm thanh" style="display: none;">
+                        <i class="fa-solid fa-volume-high"></i>
+                    </button>
+                    <button id="deleteStoryBtn" class="story-action-btn" title="Xóa Story này" style="display: none;">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                    <button id="closeStoryViewer" class="story-close-btn" title="Đóng Story"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+
+            <!-- Story Media Content -->
+            <div class="story-viewer-media" id="storyViewerMedia"></div>
+            <!-- Story Caption -->
+            <div class="story-viewer-caption" id="storyViewerCaption"></div>
+
+            <!-- Story Navigation Controls -->
+            <button class="story-nav-btn prev" id="storyPrevBtn"><i class="fa-solid fa-chevron-left"></i></button>
+            <button class="story-nav-btn next" id="storyNextBtn"><i class="fa-solid fa-chevron-right"></i></button>
+
+            <!-- Story Bottom Bar: Nút Người Xem (Chủ story bấm vào hiện danh sách chi tiết) -->
+            <div class="story-viewer-footer" id="storyViewerFooter">
+                <button id="storyViewersBtn" class="story-viewers-btn" style="display: none;">
+                    <i class="fa-solid fa-eye"></i> <span id="storyViewersCountText">0</span> người xem
+                    <i class="fa-solid fa-chevron-up" style="font-size: 11px; margin-left: 4px;"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DANH SÁCH NGƯỜI XEM STORY (STORY VIEWERS LIST) -->
+    <div class="modal-overlay" id="storyViewersModal" style="display: none; z-index: 10005;">
+        <div class="modal-box glass-card story-viewers-modal-box">
+            <button class="modal-close-btn" id="closeStoryViewersModal"><i class="fa-solid fa-xmark"></i></button>
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-eye" style="color: #38bdf8;"></i> Người Đã Xem Story (<span id="viewersModalTotal">0</span>)</h3>
+            </div>
+            <div class="story-viewers-list-wrap" id="storyViewersList">
+                <!-- Render danh sách người xem bằng JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EDIT PROFILE -->
+    <div class="modal-overlay" id="editProfileModal" style="display: none;">
+        <div class="modal-box glass-card">
+            <button class="modal-close-btn" id="closeEditProfileModal"><i class="fa-solid fa-xmark"></i></button>
+            <div class="modal-header">
+                <h3>Chỉnh sửa hồ sơ cá nhân</h3>
+            </div>
+            <form id="editProfileForm">
+                <div class="input-group">
+                    <label>Tên hiển thị</label>
+                    <input type="text" id="editDisplayName" required>
+                </div>
+                <div class="input-group">
+                    <label>Tiểu sử (Bio)</label>
+                    <textarea id="editBio" rows="3" placeholder="Giới thiệu đôi nét về bạn..."></textarea>
+                </div>
+                <button type="submit" class="btn-primary w-full">Lưu thay đổi</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ACCOUNT SETTINGS & LOGOUT -->
+    <div class="modal-overlay" id="settingsModal" style="display: none;">
+        <div class="modal-box glass-card settings-modal-box">
+            <button class="modal-close-btn" id="closeSettingsModal"><i class="fa-solid fa-xmark"></i></button>
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-gear" style="color: var(--primary);"></i> Cài Đặt Tài Khoản</h3>
+            </div>
+            
+            <div class="settings-modal-tabs">
+                <button class="settings-tab-btn active" data-stab="tabProfile"><i class="fa-solid fa-user"></i> Hồ sơ</button>
+                <button class="settings-tab-btn" data-stab="tabVerification"><i class="fa-solid fa-circle-check" style="color: #38bdf8;"></i> Hỗ trợ & Tích xanh</button>
+                <button class="settings-tab-btn" data-stab="tabSecurity"><i class="fa-solid fa-shield-halved"></i> Đổi MK</button>
+                <button class="settings-tab-btn" data-stab="tabLogout"><i class="fa-solid fa-power-off"></i> Đăng xuất</button>
+            </div>
+
+            <!-- Tab 1: Profile & Avatar -->
+            <div class="settings-tab-content active" id="tabProfile">
+                <form id="settingsProfileForm">
+                    <div class="settings-avatar-preview-row">
+                        <img id="settingsAvatarPreview" src="/static/default-avatar.svg" class="avatar-mid" alt="Avatar">
+                        <div>
+                            <label class="btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 8px 14px;">
+                                <i class="fa-solid fa-cloud-arrow-up"></i> Tải ảnh đại diện mới
+                                <input type="file" id="settingsAvatarFile" accept="image/*" hidden>
+                            </label>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Hỗ trợ JPG, PNG, WEBP, GIF</p>
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Tên hiển thị</label>
+                        <div class="input-with-icon">
+                            <i class="fa-solid fa-signature"></i>
+                            <input type="text" id="settingsDisplayName" required placeholder="Tên hiển thị của bạn">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Tiểu sử (Bio)</label>
+                        <textarea id="settingsBio" rows="3" placeholder="Viết vài câu giới thiệu về bản thân..."></textarea>
+                    </div>
+                    <div id="settingsProfileMsg" class="form-feedback-msg" style="display: none;"></div>
+                    <button type="submit" class="btn-primary w-full"><i class="fa-solid fa-floppy-disk"></i> Lưu thông tin hồ sơ</button>
+                </form>
+            </div>
+
+            <!-- Tab 2: Security & Password -->
+            <div class="settings-tab-content" id="tabSecurity" style="display: none;">
+                <form id="changePasswordForm">
+                    <div class="input-group">
+                        <label>Mật khẩu hiện tại</label>
+                        <div class="input-with-icon">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" id="oldPasswordInput" required placeholder="Nhập mật khẩu hiện tại">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Mật khẩu mới</label>
+                        <div class="input-with-icon">
+                            <i class="fa-solid fa-key"></i>
+                            <input type="password" id="newPasswordInput" required minlength="6" placeholder="Tối thiểu 6 ký tự">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Nhập lại mật khẩu mới</label>
+                        <div class="input-with-icon">
+                            <i class="fa-solid fa-check-double"></i>
+                            <input type="password" id="confirmNewPasswordInput" required minlength="6" placeholder="Nhập lại mật khẩu mới">
+                        </div>
+                    </div>
+                    <div id="changePasswordMsg" class="form-feedback-msg" style="display: none;"></div>
+                    <button type="submit" class="btn-primary w-full"><i class="fa-solid fa-shield-check"></i> Cập nhật mật khẩu</button>
+                </form>
+            </div>
+
+            <!-- Tab: Hỗ trợ & Tích Xanh Chính Chủ -->
+            <div class="settings-tab-content" id="tabVerification" style="display: none;">
+                <!-- Trạng thái xác minh của tài khoản -->
+                <div id="verificationStatusBox" class="verification-status-box">
+                    <div style="text-align: center; padding: 20px;">
+                        <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--primary);"></i>
+                        <p style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Đang kiểm tra trạng thái xác minh...</p>
+                    </div>
+                </div>
+
+                <!-- Hộp gửi yêu cầu nếu chưa xác minh -->
+                <div id="verificationRequestBox" style="margin-top: 16px; display: none;">
+                    <div class="verification-guideline-card">
+                        <div style="display: flex; gap: 12px; align-items: flex-start;">
+                            <div class="guideline-icon"><i class="fa-solid fa-circle-info"></i></div>
+                            <div>
+                                <h5 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Chính Sách Cấp Tích Xanh Chính Chủ</h5>
+                                <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5;">
+                                    Tích xanh chính chủ <i class="fa-solid fa-circle-check" style="color: #38bdf8;"></i> <strong>chỉ được cấp bởi Quản trị viên (Admin)</strong> nhằm chống mạo danh, khẳng định quyền sở hữu và uy tín tài khoản.
+                                    Vui lòng điền lý do chi tiết để Admin kiểm duyệt và kích hoạt.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="verificationRequestForm" style="margin-top: 16px;">
+                        <div class="input-group">
+                            <label>Lý do xin cấp Tích Xanh</label>
+                            <textarea id="verificationReasonText" rows="3" required placeholder="Ví dụ: Tài khoản chính thức của tác giả / KOL / cá nhân uy tín, mong Admin xem xét bật tích xanh..."></textarea>
+                        </div>
+                        <div id="verificationActionMsg" class="form-feedback-msg" style="display: none;"></div>
+                        <button type="submit" id="submitVerificationBtn" class="btn-primary w-full" style="background: linear-gradient(135deg, #0284c7, #38bdf8); border: none; font-weight: 700; padding: 12px; border-radius: var(--radius-md);">
+                            <i class="fa-solid fa-paper-plane"></i> Gửi Yêu Cầu Xin Tích Xanh Đến Admin
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Tab 3: Logout -->
+            <div class="settings-tab-content" id="tabLogout" style="display: none;">
+                <div class="logout-confirm-box">
+                    <div class="logout-warning-icon"><i class="fa-solid fa-arrow-right-from-bracket"></i></div>
+                    <h4>Đăng xuất khỏi thiết bị này?</h4>
+                    <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.5; margin: 10px 0 20px;">
+                        Bạn có thể đăng nhập lại bất kỳ lúc nào bằng tài khoản và mật khẩu của mình.
+                    </p>
+                    <button type="button" id="confirmLogoutBtn" class="btn-danger w-full" style="padding: 12px; font-weight: 700; font-size: 14px; border-radius: var(--radius-md);">
+                        <i class="fa-solid fa-power-off"></i> Xác nhận Đăng xuất ngay
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="appToast" class="toast-container" style="display: none;">
+        <div class="toast-content">
+            <i id="toastIcon" class="fa-solid fa-circle-check"></i>
+            <span id="toastText">Thông báo thành công</span>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

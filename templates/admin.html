@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng Quản Trị Hệ Thống — Lumina Admin</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .admin-page-layout {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .admin-top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 24px;
+            margin-bottom: 24px;
+        }
+        .admin-nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 24px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 6px;
+            border-radius: var(--radius-md);
+        }
+        .admin-tab-btn {
+            flex: 1;
+            padding: 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-weight: 700;
+            font-size: 14px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .admin-tab-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+        }
+        .admin-section-pane {
+            display: none;
+            animation: fadeIn 0.2s ease;
+        }
+        .admin-section-pane.active {
+            display: block;
+        }
+        .settings-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .settings-form-grid {
+                grid-template-columns: 1fr;
+            }
+            .admin-nav-tabs {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body class="dark-theme">
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
+    <div class="admin-page-layout">
+        <!-- TOP NAV -->
+        <header class="admin-top-nav glass-card">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div class="brand-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                <div>
+                    <h2 style="font-size: 20px; font-weight: 800;">Lumina Master Control</h2>
+                    <span style="font-size: 12px; color: var(--text-muted);">Trang quản trị toàn diện hệ thống & cơ sở dữ liệu</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <a href="/" class="btn-secondary" style="text-decoration: none;"><i class="fa-solid fa-arrow-left"></i> Về Mạng Xã Hội</a>
+                <button id="adminLogoutBtn" class="btn-secondary" style="color: var(--danger);"><i class="fa-solid fa-power-off"></i> Đăng xuất</button>
+            </div>
+        </header>
+
+        <!-- ADMIN TABS -->
+        <div class="admin-nav-tabs">
+            <button class="admin-tab-btn active" data-target="tabStats"><i class="fa-solid fa-chart-pie"></i> Thống Kê & Tổng Quan</button>
+            <button class="admin-tab-btn" data-target="tabVerifications"><i class="fa-solid fa-circle-check" style="color: #38bdf8;"></i> Duyệt Tích Xanh <span id="verifPendingCount" style="display:none; background:#ef4444; color:#fff; border-radius:10px; padding:1px 7px; font-size:11px; margin-left:4px; font-weight:800;">0</span></button>
+            <button class="admin-tab-btn" data-target="tabUsers"><i class="fa-solid fa-users-gear"></i> Quản Lý Tài Khoản</button>
+            <button class="admin-tab-btn" data-target="tabPosts"><i class="fa-solid fa-newspaper"></i> Kiểm Duyệt Bài Viết</button>
+            <button class="admin-tab-btn" data-target="tabBranding"><i class="fa-solid fa-palette"></i> Cập Nhật Tên & Logo Web</button>
+        </div>
+
+        <!-- 1. STATS TAB -->
+        <div class="admin-section-pane active" id="tabStats">
+            <div class="admin-metrics-grid">
+                <div class="metric-card glass-card">
+                    <div class="metric-icon" style="color: #6366f1;"><i class="fa-solid fa-users"></i></div>
+                    <div class="metric-info">
+                        <span class="metric-label">Tổng Người Dùng Thật</span>
+                        <h3 id="statTotalUsers">0</h3>
+                    </div>
+                </div>
+                <div class="metric-card glass-card">
+                    <div class="metric-icon" style="color: #38bdf8;"><i class="fa-solid fa-newspaper"></i></div>
+                    <div class="metric-info">
+                        <span class="metric-label">Tổng Bài Viết</span>
+                        <h3 id="statTotalPosts">0</h3>
+                    </div>
+                </div>
+                <div class="metric-card glass-card">
+                    <div class="metric-icon" style="color: #10b981;"><i class="fa-solid fa-eye"></i></div>
+                    <div class="metric-info">
+                        <span class="metric-label">Lượt Xem Thật Hệ Thống</span>
+                        <h3 id="statTotalViews">0</h3>
+                    </div>
+                </div>
+                <div class="metric-card glass-card">
+                    <div class="metric-icon" style="color: #f43f5e;"><i class="fa-solid fa-server"></i></div>
+                    <div class="metric-info">
+                        <span class="metric-label">Dung Lượng Ảnh/Video Upload</span>
+                        <h3 id="statStorageMb">0 MB</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card" style="padding: 24px;">
+                <h3 style="margin-bottom: 12px;"><i class="fa-solid fa-circle-info"></i> Tình Trạng Cơ Sở Dữ Liệu</h3>
+                <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.6;">
+                    • Cơ sở dữ liệu: <strong>SQLite (social.db)</strong> — Không cần cài thêm MySQL hay PostgreSQL, tự động lưu trữ và đồng bộ hóa bền vững khi deploy lên cloud / VPS.<br>
+                    • Chống gian lận lượt xem: Mỗi lượt xem được gắn nhãn độc nhất theo địa chỉ IP và tài khoản người dùng.<br>
+                    • Cơ chế Tích Xanh: Người dùng xin cấp tích xanh trong phần Cài đặt & Hỗ trợ, Admin kiểm duyệt và kích hoạt.
+                </p>
+            </div>
+        </div>
+
+        <!-- 2. DUYỆT TÍCH XANH TAB -->
+        <div class="admin-section-pane" id="tabVerifications">
+            <div class="admin-table-section glass-card">
+                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h3><i class="fa-solid fa-circle-check" style="color: #38bdf8;"></i> Danh Sách Yêu Cầu Xin Cấp Tích Xanh</h3>
+                        <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Người dùng gửi yêu cầu từ phần Cài đặt & Hỗ trợ. Quản trị viên duyệt để bật tích xanh chính chủ.</p>
+                    </div>
+                    <button id="refreshVerifBtn" class="btn-secondary" style="font-size: 13px;"><i class="fa-solid fa-rotate"></i> Làm mới</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Mã</th>
+                                <th>Người dùng</th>
+                                <th>Họ tên</th>
+                                <th>Bài viết / Follow</th>
+                                <th>Lý do xin tích xanh</th>
+                                <th>Ngày gửi</th>
+                                <th>Trạng thái</th>
+                                <th>Hành động Quản trị</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pageAdminVerifTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. USERS MANAGEMENT TAB -->
+        <div class="admin-section-pane" id="tabUsers">
+            <div class="admin-table-section glass-card">
+                <div class="table-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3><i class="fa-solid fa-users"></i> Danh Sách Thành Viên & Quản Trị Mật Khẩu</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tài khoản</th>
+                                <th>Họ tên</th>
+                                <th>Email</th>
+                                <th>Vai trò</th>
+                                <th>Số bài</th>
+                                <th>Tích Xanh</th>
+                                <th>Trạng thái</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pageAdminUsersTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. POSTS MANAGEMENT TAB -->
+        <div class="admin-section-pane" id="tabPosts">
+            <div class="admin-table-section glass-card">
+                <div class="table-header">
+                    <h3><i class="fa-solid fa-list-check"></i> Toàn Bộ Bài Viết Hệ Thống</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tác giả</th>
+                                <th>Nội dung</th>
+                                <th>Media</th>
+                                <th>Quyền</th>
+                                <th>Lượt xem</th>
+                                <th>Tương tác</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pageAdminPostsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. BRANDING & LOGO SETTINGS TAB -->
+        <div class="admin-section-pane" id="tabBranding">
+            <div class="glass-card" style="padding: 28px;">
+                <h3 style="margin-bottom: 20px;"><i class="fa-solid fa-brush"></i> Cập Nhật Tên Mạng Xã Hội & Logo Thương Hiệu</h3>
+                <form id="brandSettingsForm">
+                    <div class="settings-form-grid">
+                        <div class="input-group">
+                            <label>Tên mạng xã hội</label>
+                            <input type="text" id="settingSiteName" placeholder="ví dụ: Lumina Social" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Icon Logo (FontAwesome class)</label>
+                            <input type="text" id="settingLogoIcon" placeholder="ví dụ: fa-solid fa-bolt">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Mô tả giới thiệu</label>
+                        <input type="text" id="settingSiteDesc" placeholder="Mô tả slogan ngắn...">
+                    </div>
+                    <div class="input-group">
+                        <label>Tải lên tệp Logo mới (Ảnh PNG, SVG hoặc JPG)</label>
+                        <input type="file" id="settingLogoFile" accept="image/*">
+                    </div>
+                    <div id="settingsSaveSuccess" style="display: none; color: var(--success); font-weight: 700; margin-bottom: 14px;">
+                        <i class="fa-solid fa-circle-check"></i> Đã lưu cập nhật tên và logo thành công!
+                    </div>
+                    <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi thương hiệu</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: RESET PASSWORD FOR USER -->
+    <div class="modal-overlay" id="resetPassModal" style="display: none;">
+        <div class="modal-box glass-card">
+            <button class="modal-close-btn" id="closeResetPassModal"><i class="fa-solid fa-xmark"></i></button>
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-key"></i> Đặt Lại Mật Khẩu Thành Viên</h3>
+            </div>
+            <form id="resetPassForm">
+                <input type="hidden" id="resetUserId">
+                <p id="resetUserInfo" style="margin-bottom: 14px; font-weight: 600; color: var(--text-secondary);"></p>
+                <div class="input-group">
+                    <label>Mật khẩu mới</label>
+                    <input type="password" id="adminNewPassword" required minlength="6" placeholder="nhập mật khẩu mới từ 6 ký tự">
+                </div>
+                <button type="submit" class="btn-primary w-full">Xác nhận đổi mật khẩu</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            let token = localStorage.getItem('lumina_token');
+
+            async function apiFetch(url, options = {}) {
+                options.headers = options.headers || {};
+                if (token) options.headers['Authorization'] = `Bearer ${token}`;
+                return fetch(url, options);
+            }
+
+            // Verify Admin Access
+            async function checkAdmin() {
+                try {
+                    const res = await apiFetch('/api/auth/me');
+                    const d = await res.json();
+                    if (!d.user || d.user.role !== 'admin') {
+                        alert('Truy cập bị từ chối. Vui lòng đăng nhập với tài khoản Quản trị viên (admin).');
+                        window.location.href = '/';
+                        return;
+                    }
+                    loadAllAdminData();
+                } catch (e) {
+                    window.location.href = '/';
+                }
+            }
+
+            // Tabs switching
+            document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.admin-section-pane').forEach(p => p.classList.remove('active'));
+                    btn.classList.add('active');
+                    document.getElementById(btn.dataset.target).classList.add('active');
+                });
+            });
+
+            // Load Data
+            async function loadAllAdminData() {
+                // 1. Stats
+                const resStats = await apiFetch('/api/admin/stats');
+                const stats = await resStats.json();
+                document.getElementById('statTotalUsers').textContent = stats.total_users || 0;
+                document.getElementById('statTotalPosts').textContent = stats.total_posts || 0;
+                document.getElementById('statTotalViews').textContent = stats.total_views || 0;
+                document.getElementById('statStorageMb').textContent = `${stats.storage_mb || 0} MB`;
+
+                // 2. Verifications
+                await loadVerifications();
+
+                // 3. Users
+                const resUsers = await apiFetch('/api/admin/users');
+                const uData = await resUsers.json();
+                renderUsers(uData.users || []);
+
+                // 4. Posts
+                const resPosts = await apiFetch('/api/admin/posts');
+                const pData = await resPosts.json();
+                renderPosts(pData.posts || []);
+
+                // 5. Settings
+                const resSettings = await fetch('/api/settings');
+                const sData = await resSettings.json();
+                document.getElementById('settingSiteName').value = sData.site_name || 'Lumina';
+                document.getElementById('settingLogoIcon').value = sData.site_logo_icon || 'fa-solid fa-bolt';
+                document.getElementById('settingSiteDesc').value = sData.site_description || '';
+            }
+
+            async function loadVerifications() {
+                try {
+                    const res = await apiFetch('/api/admin/verifications');
+                    const d = await res.json();
+                    const reqs = d.requests || [];
+                    renderVerifications(reqs);
+
+                    const pendingCount = reqs.filter(r => r.status === 'pending').length;
+                    const badge = document.getElementById('verifPendingCount');
+                    if (pendingCount > 0) {
+                        badge.textContent = pendingCount;
+                        badge.style.display = 'inline-block';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                } catch (e) {
+                    console.error('Lỗi tải danh sách yêu cầu tích xanh:', e);
+                }
+            }
+
+            function getMetaVerifiedSvg(size = 16) {
+                return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="display:inline-block; vertical-align:middle; margin-left:4px; flex-shrink:0;">
+                    <circle cx="12" cy="12" r="10.5" fill="#0866FF"/>
+                    <path d="M10.2 15.8L6.4 12l1.4-1.4 2.4 2.4 6-6 1.4 1.4-7.4 7.4z" fill="#FFFFFF"/>
+                </svg>`;
+            }
+
+            function renderVerifications(requests) {
+                const tbody = document.getElementById('pageAdminVerifTable');
+                tbody.innerHTML = '';
+                if (requests.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Chưa có yêu cầu xin cấp tích xanh nào từ người dùng.</td></tr>`;
+                    return;
+                }
+
+                requests.forEach(r => {
+                    const tr = document.createElement('tr');
+                    let statusHtml = '';
+                    if (r.status === 'pending') {
+                        statusHtml = `<span class="status-tag" style="background: rgba(234, 179, 8, 0.15); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.3); font-weight:700;"><i class="fa-regular fa-clock"></i> Chờ duyệt</span>`;
+                    } else if (r.status === 'approved') {
+                        statusHtml = `<span class="status-tag active" style="background: rgba(8, 102, 255, 0.15); color: #0866FF; border: 1px solid rgba(8, 102, 255, 0.35); font-weight:700;">${getMetaVerifiedSvg(14)} Đã cấp</span>`;
+                    } else {
+                        statusHtml = `<span class="status-tag banned"><i class="fa-solid fa-ban"></i> Đã từ chối</span>`;
+                    }
+
+                    const timeStr = new Date(r.created_at).toLocaleString('vi-VN');
+
+                    tr.innerHTML = `
+                        <td>#${r.id}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <img src="${r.avatar_url || '/static/default-avatar.svg'}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">
+                                <strong>@${r.username}</strong>
+                            </div>
+                        </td>
+                        <td>${r.display_name} ${r.is_verified ? getMetaVerifiedSvg(16) : ''}</td>
+                        <td><span style="font-size: 12px; color: var(--text-secondary);">${r.posts_count} bài / ${r.followers_count} follow</span></td>
+                        <td style="max-width: 250px;">
+                            <div style="font-size: 13px; line-height: 1.4; word-break: break-word;">${r.reason || '<em style="color:var(--text-muted)">Không ghi lý do</em>'}</div>
+                            ${r.admin_note ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Ghi chú Admin: ${r.admin_note}</div>` : ''}
+                        </td>
+                        <td style="font-size: 12px; color: var(--text-muted);">${timeStr}</td>
+                        <td>${statusHtml}</td>
+                        <td>
+                            ${r.status === 'pending' ? `
+                                <button class="btn-table-action approve-verif-btn" style="background: rgba(8, 102, 255, 0.15); color: #0866FF; border-color: rgba(8, 102, 255, 0.35); font-weight: 700; margin-right: 4px;">
+                                    <i class="fa-solid fa-check"></i> Duyệt cấp
+                                </button>
+                                <button class="btn-table-action danger reject-verif-btn">
+                                    <i class="fa-solid fa-xmark"></i> Từ chối
+                                </button>
+                            ` : r.status === 'approved' ? `
+                                <button class="btn-table-action danger reject-verif-btn" title="Thu hồi tích xanh của tài khoản này">
+                                    <i class="fa-solid fa-ban"></i> Thu hồi
+                                </button>
+                            ` : `
+                                <button class="btn-table-action approve-verif-btn" style="color: #0866FF; border-color: rgba(8, 102, 255, 0.35);">
+                                    <i class="fa-solid fa-rotate"></i> Duyệt lại
+                                </button>
+                            `}
+                        </td>
+                    `;
+
+                    const approveBtn = tr.querySelector('.approve-verif-btn');
+                    if (approveBtn) {
+                        approveBtn.addEventListener('click', async () => {
+                            if (!confirm(`Xác nhận DUYỆT và BẬT TÍCH XANH cho @${r.username} (${r.display_name})?`)) return;
+                            const fd = new FormData();
+                            fd.append('action', 'approve');
+                            fd.append('admin_note', 'Đã được Quản trị viên phê duyệt');
+                            const res = await apiFetch(`/api/admin/verifications/${r.id}`, { method: 'POST', body: fd });
+                            if (res.ok) {
+                                alert(`Đã cấp tích xanh chính chủ cho @${r.username}!`);
+                                loadAllAdminData();
+                            } else {
+                                const d = await res.json();
+                                alert(d.error || 'Lỗi xử lý');
+                            }
+                        });
+                    }
+
+                    const rejectBtn = tr.querySelector('.reject-verif-btn');
+                    if (rejectBtn) {
+                        rejectBtn.addEventListener('click', async () => {
+                            const note = prompt('Nhập lý do từ chối / thu hồi (hoặc để trống):', 'Chưa đủ điều kiện xác minh chính chủ');
+                            if (note === null) return;
+                            const fd = new FormData();
+                            fd.append('action', 'reject');
+                            fd.append('admin_note', note || 'Bị từ chối bởi Quản trị viên');
+                            const res = await apiFetch(`/api/admin/verifications/${r.id}`, { method: 'POST', body: fd });
+                            if (res.ok) {
+                                alert(`Đã cập nhật trạng thái yêu cầu của @${r.username}!`);
+                                loadAllAdminData();
+                            } else {
+                                const d = await res.json();
+                                alert(d.error || 'Lỗi xử lý');
+                            }
+                        });
+                    }
+
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById('refreshVerifBtn')?.addEventListener('click', () => {
+                loadVerifications();
+            });
+
+            function renderUsers(users) {
+                const tbody = document.getElementById('pageAdminUsersTable');
+                tbody.innerHTML = '';
+                users.forEach(u => {
+                    const tr = document.createElement('tr');
+                    const isVerif = Boolean(u.is_verified);
+                    tr.innerHTML = `
+                        <td>#${u.id}</td>
+                        <td><strong>@${u.username}</strong></td>
+                        <td>
+                            ${u.display_name}
+                            ${isVerif ? getMetaVerifiedSvg(16) : ''}
+                        </td>
+                        <td>${u.email}</td>
+                        <td><span class="role-badge ${u.role}">${u.role}</span></td>
+                        <td>${u.posts_count}</td>
+                        <td>
+                            ${isVerif ? `
+                                <span class="status-tag active" style="background: rgba(8, 102, 255, 0.15); color: #0866FF; border: 1px solid rgba(8, 102, 255, 0.35); font-weight:700;">
+                                    ${getMetaVerifiedSvg(13)} Đã cấp
+                                </span>
+                                <button class="btn-table-action toggle-verify-btn" style="margin-left: 4px; font-size: 11px; padding: 3px 7px;" title="Tắt tích xanh">Hạ</button>
+                            ` : `
+                                <button class="btn-table-action toggle-verify-btn" style="color: #0866FF; border-color: rgba(8, 102, 255, 0.35); font-size: 11px; padding: 4px 8px; font-weight: 600;" title="Kích hoạt tích xanh trực tiếp">
+                                    ${getMetaVerifiedSvg(13)} Bật
+                                </button>
+                            `}
+                        </td>
+                        <td><span class="status-tag ${u.is_active ? 'active' : 'banned'}">${u.is_active ? 'Hoạt động' : 'Đã khóa'}</span></td>
+                        <td>
+                            <button class="btn-table-action toggle-btn" style="margin-right:4px;">${u.is_active ? 'Khóa' : 'Mở'}</button>
+                            <button class="btn-table-action reset-btn" style="margin-right:4px;"><i class="fa-solid fa-key"></i> Đổi MK</button>
+                            <button class="btn-table-action danger del-user-btn"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    `;
+                    tr.querySelector('.toggle-verify-btn').addEventListener('click', async () => {
+                        const actionText = isVerif ? 'TẮT TÍCH XANH' : 'BẬT TÍCH XANH';
+                        if (!confirm(`Bạn có chắc chắn muốn ${actionText} cho người dùng @${u.username}?`)) return;
+                        const res = await apiFetch(`/api/admin/users/${u.id}/toggle-verify`, { method: 'POST' });
+                        if (res.ok) {
+                            loadAllAdminData();
+                        } else {
+                            const d = await res.json();
+                            alert(d.error || 'Lỗi thao tác');
+                        }
+                    });
+                    tr.querySelector('.toggle-btn').addEventListener('click', async () => {
+                        await apiFetch(`/api/admin/toggle-user/${u.id}`, { method: 'POST' });
+                        loadAllAdminData();
+                    });
+                    tr.querySelector('.reset-btn').addEventListener('click', () => {
+                        document.getElementById('resetUserId').value = u.id;
+                        document.getElementById('resetUserInfo').textContent = `Tài khoản: @${u.username} (${u.display_name})`;
+                        document.getElementById('resetPassModal').style.display = 'flex';
+                    });
+                    tr.querySelector('.del-user-btn').addEventListener('click', async () => {
+                        if (!confirm(`Xác nhận xóa vĩnh viễn tài khoản @${u.username}?`)) return;
+                        const res = await apiFetch(`/api/admin/users/${u.id}`, { method: 'DELETE' });
+                        const d = await res.json();
+                        if (res.ok) loadAllAdminData();
+                        else alert(d.error);
+                    });
+                    tbody.appendChild(tr);
+                });
+            }
+
+            function renderPosts(posts) {
+                const tbody = document.getElementById('pageAdminPostsTable');
+                tbody.innerHTML = '';
+                posts.forEach(p => {
+                    const tr = document.createElement('tr');
+                    const text = (p.content || '').slice(0, 35) + '...';
+                    tr.innerHTML = `
+                        <td>#${p.id}</td>
+                        <td>@${p.username}</td>
+                        <td>${text}</td>
+                        <td><span class="badge">${p.media_type}</span></td>
+                        <td><span class="status-tag ${p.privacy === 'private' ? 'banned' : 'active'}">${p.privacy}</span></td>
+                        <td><strong>${p.views_count}</strong></td>
+                        <td>${p.likes_count} tim / ${p.comments_count} cmt</td>
+                        <td>
+                            <button class="btn-table-action danger del-post-btn"><i class="fa-solid fa-trash"></i> Xóa</button>
+                        </td>
+                    `;
+                    tr.querySelector('.del-post-btn').addEventListener('click', async () => {
+                        if (!confirm(`Xác nhận xóa bài viết #${p.id}?`)) return;
+                        await apiFetch(`/api/posts/${p.id}`, { method: 'DELETE' });
+                        loadAllAdminData();
+                    });
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // Reset Password Submit
+            document.getElementById('resetPassForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const uid = document.getElementById('resetUserId').value;
+                const newPass = document.getElementById('adminNewPassword').value;
+                const fd = new FormData();
+                fd.append('user_id', uid);
+                fd.append('new_password', newPass);
+
+                const res = await apiFetch('/api/admin/reset-password', { method: 'POST', body: fd });
+                const d = await res.json();
+                if (res.ok) {
+                    alert('Đã đổi mật khẩu thành công!');
+                    document.getElementById('resetPassModal').style.display = 'none';
+                    document.getElementById('adminNewPassword').value = '';
+                } else {
+                    alert(d.error || 'Lỗi');
+                }
+            });
+            document.getElementById('closeResetPassModal').addEventListener('click', () => {
+                document.getElementById('resetPassModal').style.display = 'none';
+            });
+
+            // Brand Settings Form
+            document.getElementById('brandSettingsForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const fd = new FormData();
+                fd.append('site_name', document.getElementById('settingSiteName').value.trim());
+                fd.append('site_logo_icon', document.getElementById('settingLogoIcon').value.trim());
+                fd.append('site_description', document.getElementById('settingSiteDesc').value.trim());
+                const file = document.getElementById('settingLogoFile').files[0];
+                if (file) fd.append('logo_file', file);
+
+                const res = await apiFetch('/api/admin/settings', { method: 'POST', body: fd });
+                if (res.ok) {
+                    const msg = document.getElementById('settingsSaveSuccess');
+                    msg.style.display = 'block';
+                    setTimeout(() => msg.style.display = 'none', 3000);
+                }
+            });
+
+            document.getElementById('adminLogoutBtn').addEventListener('click', () => {
+                localStorage.removeItem('lumina_token');
+                window.location.href = '/';
+            });
+
+            checkAdmin();
+        });
+    </script>
+</body>
+</html>
