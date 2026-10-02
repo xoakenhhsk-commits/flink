@@ -26,15 +26,22 @@ else:
 for sub in ["images", "videos", "audio", "stories", "avatars", "branding"]:
     os.makedirs(os.path.join(UPLOAD_DIR, sub), exist_ok=True)
 
-# Copy default branding if running in /tmp
+# Copy bundled uploads if running in /tmp
 if os.environ.get("VERCEL"):
-    src_branding = os.path.join(BASE_DIR, "uploads", "branding")
-    dst_branding = os.path.join(UPLOAD_DIR, "branding")
-    if os.path.exists(src_branding) and not os.path.exists(dst_branding):
-        try:
-            shutil.copytree(src_branding, dst_branding, dirs_exist_ok=True)
-        except Exception:
-            pass
+    src_uploads = os.path.join(BASE_DIR, "uploads")
+    if os.path.exists(src_uploads):
+        for root, dirs, files in os.walk(src_uploads):
+            rel = os.path.relpath(root, src_uploads)
+            dest_dir = os.path.join(UPLOAD_DIR, rel)
+            os.makedirs(dest_dir, exist_ok=True)
+            for f in files:
+                src_file = os.path.join(root, f)
+                dest_file = os.path.join(dest_dir, f)
+                if not os.path.exists(dest_file):
+                    try:
+                        shutil.copy2(src_file, dest_file)
+                    except Exception:
+                        pass
 
 # Đảm bảo database sẵn sàng
 try:

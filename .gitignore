@@ -9,10 +9,8 @@ ENV/
 .venv/
 temp_out.txt
 *.log
-uploads/audio/*
-uploads/avatars/*
-uploads/images/*
-uploads/stories/*
-uploads/videos/*
+# Ignore only huge media test files > 50MB to prevent GitHub timeout
+uploads/audio/e2f240257cf87bf7_1790932522.mp3
+uploads/videos/8c6fc0f29853d08d_1790940127.mp4
 *.db-shm
 *.db-wal
