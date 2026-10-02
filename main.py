@@ -15,18 +15,38 @@ from fastapi.templating import Jinja2Templates
 import database
 from database import get_db, hash_password
 
-# Đảm bảo database và thư mục lưu trữ sẵn sàng
-database.init_db()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+# Vercel Serverless environment support
+if os.environ.get("VERCEL"):
+    UPLOAD_DIR = "/tmp/uploads"
+else:
+    UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+
 for sub in ["images", "videos", "audio", "stories", "avatars", "branding"]:
     os.makedirs(os.path.join(UPLOAD_DIR, sub), exist_ok=True)
 
+# Copy default branding if running in /tmp
+if os.environ.get("VERCEL"):
+    src_branding = os.path.join(BASE_DIR, "uploads", "branding")
+    dst_branding = os.path.join(UPLOAD_DIR, "branding")
+    if os.path.exists(src_branding) and not os.path.exists(dst_branding):
+        try:
+            shutil.copytree(src_branding, dst_branding, dirs_exist_ok=True)
+        except Exception:
+            pass
+
+# Đảm bảo database sẵn sàng
+try:
+    database.init_db()
+except Exception as e:
+    print("Database init note:", e)
+
 app = FastAPI(title="Lumina Social Network Pro", version="2.0.0")
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 # --- AUTH HELPER ---
 def get_current_user_optional(request: Request) -> Optional[dict]:

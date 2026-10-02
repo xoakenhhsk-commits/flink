@@ -1,15 +1,32 @@
 import sqlite3
 import os
+import shutil
 import hashlib
 import secrets
 from datetime import datetime, timedelta
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "social.db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Vercel Serverless environment support
+if os.environ.get("VERCEL"):
+    DB_DIR = "/tmp"
+    DB_PATH = os.path.join(DB_DIR, "social.db")
+    src_db = os.path.join(BASE_DIR, "social.db")
+    if not os.path.exists(DB_PATH) and os.path.exists(src_db):
+        try:
+            shutil.copy2(src_db, DB_PATH)
+        except Exception as e:
+            print("Vercel DB copy warning:", e)
+else:
+    DB_PATH = os.path.join(BASE_DIR, "social.db")
 
 def get_db():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    if os.environ.get("VERCEL"):
+        conn.execute("PRAGMA journal_mode=MEMORY")
+    else:
+        conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
