@@ -4,3 +4,4 @@ google-generativeai
 python-multipart
 jinja2
 Pillow
+psycopg2-binary

@@ -5,23 +5,134 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta
 
+import re
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Vercel Serverless environment support
-if os.environ.get("VERCEL"):
-    DB_DIR = "/tmp"
-    DB_PATH = os.path.join(DB_DIR, "social.db")
-    src_db = os.path.join(BASE_DIR, "social.db")
-    if not os.path.exists(DB_PATH) and os.path.exists(src_db):
-        try:
-            shutil.copy2(src_db, DB_PATH)
-        except Exception as e:
-            print("Vercel DB copy warning:", e)
-else:
-    DB_PATH = os.path.join(BASE_DIR, "social.db")
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+
+# --- POSTGRESQL / NEON ADAPTER WRAPPERS ---
+class PostgresCursorWrapper:
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.lastrowid = None
+
+    def execute(self, sql, params=None):
+        converted_sql = sql.strip()
+        
+        # Bỏ qua các lệnh PRAGMA của SQLite
+        if converted_sql.upper().startswith("PRAGMA"):
+            return self
+
+        # Đổi INTEGER PRIMARY KEY AUTOINCREMENT -> SERIAL PRIMARY KEY
+        converted_sql = re.sub(r'INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT', 'SERIAL PRIMARY KEY', converted_sql, flags=re.IGNORECASE)
+
+        # Đổi INSERT OR IGNORE -> INSERT ... ON CONFLICT DO NOTHING
+        if re.search(r'INSERT\s+OR\s+IGNORE\s+INTO', converted_sql, re.IGNORECASE):
+            converted_sql = re.sub(r'INSERT\s+OR\s+IGNORE\s+INTO', 'INSERT INTO', converted_sql, flags=re.IGNORECASE)
+            converted_sql += ' ON CONFLICT DO NOTHING'
+
+        # Đổi INSERT OR REPLACE INTO site_settings
+        if re.search(r'INSERT\s+OR\s+REPLACE\s+INTO\s+site_settings', converted_sql, re.IGNORECASE):
+            converted_sql = re.sub(r'INSERT\s+OR\s+REPLACE\s+INTO\s+site_settings', 'INSERT INTO site_settings', converted_sql, flags=re.IGNORECASE)
+            converted_sql += ' ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value'
+
+        # Chuyển đổi tham số ? sang %s
+        converted_sql = converted_sql.replace('?', '%s')
+
+        # Hỗ trợ lấy lastrowid cho câu lệnh INSERT có bảng chứa cột id
+        is_insert = bool(re.search(r'^\s*INSERT\s+INTO', converted_sql, re.IGNORECASE))
+        has_returning = 'RETURNING' in converted_sql.upper()
+        
+        insert_id_tables = ['users', 'posts', 'comments', 'stories', 'verification_requests', 'follows', 'post_likes', 'post_views', 'story_views']
+        if is_insert and not has_returning and any(f" {tbl} " in f" {converted_sql} " or f"({tbl})" in converted_sql for tbl in insert_id_tables):
+            converted_sql += ' RETURNING id'
+            if params is not None:
+                self._cursor.execute(converted_sql, tuple(params))
+            else:
+                self._cursor.execute(converted_sql)
+            try:
+                row = self._cursor.fetchone()
+                if row:
+                    self.lastrowid = row[0]
+            except Exception:
+                pass
+            return self
+
+        if params is not None:
+            self._cursor.execute(converted_sql, tuple(params))
+        else:
+            self._cursor.execute(converted_sql)
+        return self
+
+    def executemany(self, sql, seq_of_params):
+        converted_sql = sql.replace('?', '%s')
+        return self._cursor.executemany(converted_sql, seq_of_params)
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def fetchmany(self, size=None):
+        return self._cursor.fetchmany(size)
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    def close(self):
+        return self._cursor.close()
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+class PostgresConnectionWrapper:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        import psycopg2.extras
+        cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        return PostgresCursorWrapper(cur)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
+    def execute(self, sql, params=None):
+        cur = self.cursor()
+        cur.execute(sql, params)
+        return cur
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30.0)
+    if DATABASE_URL:
+        import psycopg2
+        url = DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        conn = psycopg2.connect(url)
+        return PostgresConnectionWrapper(conn)
+
+    # Fallback SQLite
+    if os.environ.get("VERCEL"):
+        db_path = "/tmp/social.db"
+        src_db = os.path.join(BASE_DIR, "social.db")
+        if not os.path.exists(db_path) and os.path.exists(src_db):
+            try:
+                shutil.copy2(src_db, db_path)
+            except Exception as e:
+                print("Vercel DB copy warning:", e)
+    else:
+        db_path = os.path.join(BASE_DIR, "social.db")
+
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
     conn.row_factory = sqlite3.Row
     if os.environ.get("VERCEL"):
         conn.execute("PRAGMA journal_mode=MEMORY")
