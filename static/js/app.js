@@ -956,6 +956,70 @@ document.addEventListener('DOMContentLoaded', () => {
         mediaPreviewContent.innerHTML = '';
     });
 
+    // Hàm nén ảnh máy khách bằng HTML5 Canvas để upload siêu tốc, không vượt giới hạn 4.5MB của Vercel
+    async function compressImageFile(file, maxWidth = 1400, quality = 0.82) {
+        if (!file || !file.type.startsWith('image/') || file.type === 'image/gif') {
+            return file;
+        }
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > maxWidth || height > maxWidth) {
+                        if (width > height) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        } else {
+                            width = Math.round((width * maxWidth) / height);
+                            height = maxWidth;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    canvas.toBlob((blob) => {
+                        if (!blob) return resolve(file);
+                        const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        });
+                        resolve(compressedFile);
+                    }, 'image/jpeg', quality);
+                };
+                img.onerror = () => resolve(file);
+                img.src = e.target.result;
+            };
+            reader.onerror = () => resolve(file);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Kho lưu trữ bài viết an toàn trên trình duyệt (Local Post Vault)
+    function savePostToLocalVault(postObj) {
+        try {
+            const vaultStr = localStorage.getItem('lumina_local_posts_vault') || '[]';
+            let vault = JSON.parse(vaultStr);
+            if (!Array.isArray(vault)) vault = [];
+            vault = [postObj, ...vault.filter(p => p.id !== postObj.id)].slice(0, 40);
+            localStorage.setItem('lumina_local_posts_vault', JSON.stringify(vault));
+        } catch (e) {}
+    }
+
+    function getLocalPostsVault() {
+        try {
+            const vaultStr = localStorage.getItem('lumina_local_posts_vault') || '[]';
+            const vault = JSON.parse(vaultStr);
+            return Array.isArray(vault) ? vault : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
     publishPostBtn.addEventListener('click', async () => {
         if (!currentUser) return openAuth('login');
         const content = quickPostText.value.trim();
@@ -968,17 +1032,65 @@ document.addEventListener('DOMContentLoaded', () => {
         publishPostBtn.disabled = true;
         publishPostBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang đăng...';
 
-        const formData = new FormData();
-        formData.append('content', content);
-        formData.append('privacy', privacy);
-        if (currentMediaFile) {
-            formData.append('media', currentMediaFile);
-        }
-
         try {
+            let fileToUpload = currentMediaFile;
+
+            // 1. Tự động nén ảnh chất lượng cao để dung lượng còn ~150KB, đăng tức thì
+            if (currentMediaFile && currentMediaFile.type.startsWith('image/')) {
+                fileToUpload = await compressImageFile(currentMediaFile);
+            }
+            // 2. Kiểm tra dung lượng video trước khi gửi lên Vercel Serverless
+            else if (currentMediaFile && currentMediaFile.type.startsWith('video/')) {
+                if (currentMediaFile.size > 4.5 * 1024 * 1024) {
+                    publishPostBtn.disabled = false;
+                    publishPostBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Đăng';
+                    return alert(`⚠️ Video dung lượng ${(currentMediaFile.size / 1024 / 1024).toFixed(1)}MB vượt quá giới hạn 4.5MB của serverless.\n\nVui lòng chọn video ngắn hơn hoặc nén video dưới 4.5MB để đăng thành công!`);
+                }
+            }
+
+            const formData = new FormData();
+            formData.append('content', content);
+            formData.append('privacy', privacy);
+            if (fileToUpload) {
+                formData.append('media', fileToUpload);
+            }
+
             const res = await apiFetch('/api/posts', { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Lỗi khi đăng bài');
+
+            // Tạo object bài viết đầy đủ để lưu vào Local Vault và hiển thị tức thì 0ms
+            const newPostObj = {
+                id: data.post_id,
+                user_id: currentUser.id,
+                username: currentUser.username,
+                display_name: currentUser.display_name,
+                avatar_url: currentUser.avatar_url,
+                role: currentUser.role,
+                is_verified: currentUser.is_verified || 0,
+                content: content,
+                media_type: data.media_type || (fileToUpload ? (fileToUpload.type.startsWith('image/') ? 'image' : fileToUpload.type.startsWith('video/') ? 'video' : 'audio') : 'none'),
+                media_url: data.media_url || (fileToUpload ? URL.createObjectURL(fileToUpload) : ''),
+                media_name: data.media_name || (fileToUpload ? fileToUpload.name : ''),
+                privacy: privacy,
+                views_count: 0,
+                likes_count: 0,
+                comments_count: 0,
+                is_liked: 0,
+                created_at: new Date().toISOString()
+            };
+
+            // Lưu bài viết vào kho Vault trên trình duyệt
+            savePostToLocalVault(newPostObj);
+
+            // Chèn ngay vào giao diện Feed ở đầu trang với hiệu ứng nổi bật
+            if (postsFeed) {
+                const newCard = createPostCard(newPostObj);
+                newCard.classList.add('new-post-incoming-animate');
+                postsFeed.insertBefore(newCard, postsFeed.firstChild);
+                postObserver.observe(newCard);
+                if (newPostObj.id > maxFeedPostId) maxFeedPostId = newPostObj.id;
+            }
 
             quickPostText.value = '';
             removeMediaBtn.click();
@@ -1067,7 +1179,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderFeed(posts) {
         postsFeed.innerHTML = '';
-        const visiblePosts = posts || [];
+        let visiblePosts = (posts || []).filter(p => !isPostDeleted(p.id));
+
+        // Hợp nhất các bài viết từ kho lưu trữ Local Vault để đảm bảo bài mới của user luôn hiển thị và không bao giờ bị mất
+        const localVault = getLocalPostsVault();
+        if (localVault.length > 0) {
+            const existingIds = new Set(visiblePosts.map(p => Number(p.id)));
+            const missingVaultPosts = localVault.filter(p => !existingIds.has(Number(p.id)) && !isPostDeleted(p.id));
+            if (missingVaultPosts.length > 0) {
+                visiblePosts = [...missingVaultPosts, ...visiblePosts];
+                visiblePosts.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+            }
+        }
+
         if (visiblePosts.length === 0) {
             postsFeed.innerHTML = `
                 <div class="glass-card" style="padding: 40px; text-align: center; color: var(--text-secondary);">
@@ -1112,7 +1236,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderExplore(posts) {
         if (!exploreFeed) return;
         exploreFeed.innerHTML = '';
-        if (posts.length === 0) {
+        let visiblePosts = (posts || []).filter(p => !isPostDeleted(p.id));
+
+        // Hợp nhất bài viết có media từ Local Vault
+        const localVault = getLocalPostsVault();
+        if (localVault.length > 0) {
+            const existingIds = new Set(visiblePosts.map(p => Number(p.id)));
+            let missingVaultPosts = localVault.filter(p => !existingIds.has(Number(p.id)) && !isPostDeleted(p.id));
+            if (currentExploreFilter === 'media') {
+                missingVaultPosts = missingVaultPosts.filter(p => p.media_type && p.media_type !== 'none');
+            } else if (currentExploreFilter === 'videos') {
+                missingVaultPosts = missingVaultPosts.filter(p => p.media_type === 'video');
+            }
+            if (missingVaultPosts.length > 0) {
+                visiblePosts = [...missingVaultPosts, ...visiblePosts];
+                visiblePosts.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+            }
+        }
+
+        if (visiblePosts.length === 0) {
             exploreFeed.innerHTML = `
                 <div class="glass-card" style="padding: 40px; text-align: center; color: var(--text-secondary);">
                     <i class="fa-solid fa-compass" style="font-size: 40px; margin-bottom: 12px; color: var(--primary);"></i>
@@ -1122,7 +1264,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        posts.forEach(post => {
+        visiblePosts.forEach(post => {
             const postCard = createPostCard(post);
             exploreFeed.appendChild(postCard);
             postObserver.observe(postCard);

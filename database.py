@@ -53,7 +53,7 @@ class PostgresCursorWrapper:
         has_returning = 'RETURNING' in converted_sql.upper()
         
         insert_id_tables = ['users', 'posts', 'comments', 'stories', 'verification_requests', 'follows', 'post_likes', 'post_views', 'story_views']
-        if is_insert and not has_returning and any(f" {tbl} " in f" {converted_sql} " or f"({tbl})" in converted_sql for tbl in insert_id_tables):
+        if is_insert and not has_returning and any(re.search(r'\b' + tbl + r'\b', converted_sql, re.IGNORECASE) for tbl in insert_id_tables):
             converted_sql += ' RETURNING id'
             if params is not None:
                 import psycopg2
@@ -185,6 +185,7 @@ def init_db():
         content TEXT DEFAULT '',
         media_type TEXT DEFAULT 'none', -- 'image', 'video', 'audio', 'none'
         media_url TEXT DEFAULT '',
+        media_data TEXT DEFAULT '', -- Lưu trực tiếp Data URL vĩnh viễn
         media_name TEXT DEFAULT '',
         privacy TEXT DEFAULT 'public', -- 'public' (công khai) hoặc 'private' (chỉ mình tôi)
         views_count INTEGER DEFAULT 0,
@@ -335,6 +336,12 @@ def init_db():
     # Migration: Thêm cột privacy cho stories
     try:
         cursor.execute("ALTER TABLE stories ADD COLUMN privacy TEXT DEFAULT 'public'")
+    except Exception:
+        pass
+
+    # Migration: Thêm cột media_data cho posts
+    try:
+        cursor.execute("ALTER TABLE posts ADD COLUMN media_data TEXT DEFAULT ''")
     except Exception:
         pass
 

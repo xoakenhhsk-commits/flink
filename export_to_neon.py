@@ -40,6 +40,7 @@ CREATE TABLE posts (
     content TEXT DEFAULT '',
     media_type VARCHAR(50) DEFAULT 'none',
     media_url TEXT DEFAULT '',
+    media_data TEXT DEFAULT '',
     media_name TEXT DEFAULT '',
     views_count INTEGER DEFAULT 0,
     privacy VARCHAR(50) DEFAULT 'public',

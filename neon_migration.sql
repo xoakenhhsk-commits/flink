@@ -36,6 +36,7 @@ CREATE TABLE posts (
     content TEXT DEFAULT '',
     media_type VARCHAR(50) DEFAULT 'none',
     media_url TEXT DEFAULT '',
+    media_data TEXT DEFAULT '',
     media_name TEXT DEFAULT '',
     views_count INTEGER DEFAULT 0,
     privacy VARCHAR(50) DEFAULT 'public',
@@ -138,10 +139,10 @@ INSERT INTO users (id, username, display_name, email, password_hash, avatar_url,
 SELECT setval(pg_get_serial_sequence('users', 'id'), coalesce(max(id), 1)) FROM users;
 
 -- DATA FOR posts (4 rows)
-INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy) VALUES (4, 1, '', 'video', '/uploads/videos/7c2749531868d036_1790932159.mp4', '5920.mp4', 6, '2026-10-02 09:09:19', 'public');
-INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy) VALUES (6, 1, '', 'audio', '/uploads/audio/e2f240257cf87bf7_1790932522.mp3', '🎬 ណូយ វ៉ាន់ណេត ជ្រើសរើសបទចាស់ៗពិរោះៗ  Noy Vanneth Collection Nonstop Old Song - Lida Somaly (youtube).mp3', 2, '2026-10-02 09:15:22', 'private');
-INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy) VALUES (7, 3, 'Nhạc khmer #nhackhmer', 'video', '/uploads/videos/ee947d309a51256a_1790935523.mp4', '5530.mp4', 7, '2026-10-02 10:05:23', 'public');
-INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy) VALUES (8, 3, 'Triệu view #nhac2026', 'video', '/uploads/videos/8c6fc0f29853d08d_1790940127.mp4', '5905.mp4', 2, '2026-10-02 11:22:08', 'public');
+INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (4, 1, '', 'video', '/uploads/videos/7c2749531868d036_1790932159.mp4', '5920.mp4', 6, '2026-10-02 09:09:19', 'public', '');
+INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (6, 1, '', 'audio', '/uploads/audio/e2f240257cf87bf7_1790932522.mp3', '🎬 ណូយ វ៉ាន់ណេត ជ្រើសរើសបទចាស់ៗពិរោះៗ  Noy Vanneth Collection Nonstop Old Song - Lida Somaly (youtube).mp3', 2, '2026-10-02 09:15:22', 'private', '');
+INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (7, 3, 'Nhạc khmer #nhackhmer', 'video', '/uploads/videos/ee947d309a51256a_1790935523.mp4', '5530.mp4', 7, '2026-10-02 10:05:23', 'public', '');
+INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (8, 3, 'Triệu view #nhac2026', 'video', '/uploads/videos/8c6fc0f29853d08d_1790940127.mp4', '5905.mp4', 2, '2026-10-02 11:22:08', 'public', '');
 SELECT setval(pg_get_serial_sequence('posts', 'id'), coalesce(max(id), 1)) FROM posts;
 
 -- DATA FOR post_views (34 rows)

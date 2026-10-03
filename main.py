@@ -56,8 +56,24 @@ app = FastAPI(title="Lumina Social Network Pro", version="2.0.0")
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
+class MediaSavedResult(str):
+    def __new__(cls, rel_url: str, file_bytes: bytes = b"", content_type: str = ""):
+        obj = super().__new__(cls, rel_url)
+        obj.rel_url = rel_url
+        obj.file_bytes = file_bytes
+        obj.content_type = content_type
+        return obj
+
+    @property
+    def data_url(self) -> str:
+        if not self.file_bytes:
+            return ""
+        import base64
+        mime = self.content_type or "image/jpeg"
+        return f"data:{mime};base64,{base64.b64encode(self.file_bytes).decode('utf-8')}"
+
 # --- DATABASE-BACKED MEDIA STORAGE (ĐẢM BẢO ẢNH/VIDEO LƯU VĨNH VIỄN TRONG CSDL) ---
-def save_media_to_storage(subfolder: str, filename: str, file_bytes: bytes, content_type: str = "") -> str:
+def save_media_to_storage(subfolder: str, filename: str, file_bytes: bytes, content_type: str = "") -> MediaSavedResult:
     ext = os.path.splitext(filename)[1].lower()
     if not content_type:
         import mimetypes
@@ -70,8 +86,8 @@ def save_media_to_storage(subfolder: str, filename: str, file_bytes: bytes, cont
             img = Image.open(io.BytesIO(file_bytes))
             # Auto-orient theo EXIF (rất quan trọng cho ảnh chụp từ iPhone)
             img = ImageOps.exif_transpose(img)
-            # Giới hạn kích thước tối đa 1600px để tối ưu dung lượng và tốc độ tải
-            max_dimension = 1600
+            # Giới hạn kích thước tối đa 1400px để tối ưu dung lượng và tốc độ tải
+            max_dimension = 1400
             if img.width > max_dimension or img.height > max_dimension:
                 img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
 
@@ -82,12 +98,12 @@ def save_media_to_storage(subfolder: str, filename: str, file_bytes: bytes, cont
                     content_type = "image/png"
                 else:
                     img = img.convert("RGB")
-                    img.save(buf, format="JPEG", quality=82, optimize=True)
+                    img.save(buf, format="JPEG", quality=80, optimize=True)
                     content_type = "image/jpeg"
                     ext = ".jpg"
             else:
                 img = img.convert("RGB")
-                img.save(buf, format="JPEG", quality=82, optimize=True)
+                img.save(buf, format="JPEG", quality=80, optimize=True)
                 content_type = "image/jpeg"
                 ext = ".jpg"
             file_bytes = buf.getvalue()
@@ -128,7 +144,7 @@ def save_media_to_storage(subfolder: str, filename: str, file_bytes: bytes, cont
     except Exception as e:
         print("Lỗi lưu file vào CSDL:", e)
 
-    return rel_url
+    return MediaSavedResult(rel_url, file_bytes, content_type)
 
 def sync_existing_uploads_to_db():
     src_uploads = os.path.join(BASE_DIR, "uploads")
@@ -742,7 +758,7 @@ async def get_posts(
 
     cursor.execute(f"""
         SELECT 
-            p.id, p.user_id, p.content, p.media_type, p.media_url, p.media_name, p.privacy, p.views_count, p.created_at,
+            p.id, p.user_id, p.content, p.media_type, p.media_url, p.media_data, p.media_name, p.privacy, p.views_count, p.created_at,
             u.username, u.display_name, u.avatar_url, u.role, u.is_verified,
             (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as likes_count,
             (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comments_count,
@@ -750,13 +766,18 @@ async def get_posts(
         FROM posts p
         JOIN users u ON p.user_id = u.id
         {where_sql}
-        ORDER BY p.created_at DESC
+        ORDER BY p.id DESC
         LIMIT ? OFFSET ?
     """, tuple(all_params))
     rows = cursor.fetchall()
     conn.close()
 
-    posts = [dict(r) for r in rows]
+    posts = []
+    for r in rows:
+        d = dict(r)
+        if d.get("media_data"):
+            d["media_url"] = d["media_data"]
+        posts.append(d)
     return JSONResponse(content={"posts": posts})
 
 @app.get("/api/posts/realtime")
@@ -795,7 +816,7 @@ async def get_realtime_posts(
 
     cursor.execute(f"""
         SELECT 
-            p.id, p.user_id, p.content, p.media_type, p.media_url, p.media_name, p.privacy, p.views_count, p.created_at,
+            p.id, p.user_id, p.content, p.media_type, p.media_url, p.media_data, p.media_name, p.privacy, p.views_count, p.created_at,
             u.username, u.display_name, u.avatar_url, u.role, u.is_verified,
             (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as likes_count,
             (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comments_count,
@@ -808,7 +829,12 @@ async def get_realtime_posts(
     rows = cursor.fetchall()
     conn.close()
 
-    new_posts = [dict(r) for r in rows]
+    new_posts = []
+    for r in rows:
+        d = dict(r)
+        if d.get("media_data"):
+            d["media_url"] = d["media_data"]
+        new_posts.append(d)
     return JSONResponse(content={"new_posts": new_posts, "count": len(new_posts)})
 
 @app.post("/api/posts")
@@ -821,6 +847,7 @@ async def create_post(
     user = require_current_user(request)
     media_type = "none"
     media_url = ""
+    media_data = ""
     media_name = ""
 
     if privacy not in ["public", "private"]:
@@ -843,8 +870,17 @@ async def create_post(
             return JSONResponse(content={"error": "Định dạng tệp không được hỗ trợ"}, status_code=400)
 
         file_bytes = await media.read()
-        media_url = save_media_to_storage(subfolder, filename, file_bytes, media.content_type or "")
+        saved_media = save_media_to_storage(subfolder, filename, file_bytes, media.content_type or "")
+        media_url = str(saved_media)
         media_name = filename
+
+        # Lưu bản sao Data URL vĩnh viễn trực tiếp vào cơ sở dữ liệu:
+        # Đối với ảnh: luôn lưu Data URL để tải tức thì 0ms, không phụ thuộc ổ đĩa
+        # Đối với video/audio < 3.5MB: lưu Data URL để xem ngay không lo mất file
+        if media_type == "image":
+            media_data = saved_media.data_url
+        elif media_type in ["video", "audio"] and len(saved_media.file_bytes) < 3500000:
+            media_data = saved_media.data_url
 
     if not content.strip() and media_type == "none":
         return JSONResponse(content={"error": "Nội dung bài viết hoặc tệp đính kèm không được để trống"}, status_code=400)
@@ -852,14 +888,23 @@ async def create_post(
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO posts (user_id, content, media_type, media_url, media_name, privacy)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (user["id"], content.strip(), media_type, media_url, media_name, privacy))
+        INSERT INTO posts (user_id, content, media_type, media_url, media_data, media_name, privacy)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (user["id"], content.strip(), media_type, media_url, media_data, media_name, privacy))
     post_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
-    return JSONResponse(content={"status": "ok", "post_id": post_id})
+    return JSONResponse(content={
+        "status": "ok", 
+        "post_id": post_id, 
+        "media_url": media_data or media_url,
+        "media_data": media_data,
+        "media_type": media_type,
+        "media_name": media_name,
+        "content": content.strip(),
+        "privacy": privacy
+    })
 
 # --- HASHTAGS & TRENDING ALGORITHM ---
 @app.get("/api/trending")
