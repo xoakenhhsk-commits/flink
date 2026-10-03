@@ -125,12 +125,53 @@
                     </div>
                 </div>
 
+                <!-- New Posts Notification Pill on Feed (Cập nhật thời gian thực) -->
+                <div id="feedNewPostsAlert" class="new-posts-alert-pill" style="display: none;">
+                    <i class="fa-solid fa-circle-arrow-up"></i> <span id="feedNewPostsAlertText">Có bài viết mới vừa đăng • Nhấn để xem ngay</span>
+                </div>
+
                 <!-- POSTS FEED -->
                 <div class="posts-feed" id="postsFeed">
                     <!-- Posts will be dynamically rendered here -->
                     <div class="feed-loader" id="feedLoader">
                         <div class="spinner"></div>
                         <p>Đang tải nguồn cấp dữ liệu...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- EXPLORE VIEW (KHÁM PHÁ & THỜI GIAN THỰC) -->
+            <section id="exploreView" class="view-section" style="display: none;">
+                <!-- Explore Header & Filters -->
+                <div class="explore-header-box glass-card">
+                    <div class="explore-top-bar">
+                        <div class="explore-title-wrap">
+                            <h2><i class="fa-solid fa-compass" style="color: var(--primary);"></i> Khám Phá</h2>
+                            <span class="realtime-live-badge"><span class="live-dot"></span> Trực tiếp cập nhật</span>
+                        </div>
+                        <div class="explore-search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="exploreSearchInput" placeholder="Tìm kiếm bài viết, #hashtag, người dùng...">
+                        </div>
+                    </div>
+                    
+                    <div class="explore-filter-chips">
+                        <button class="filter-chip active" data-explore-filter="all"><i class="fa-solid fa-border-all"></i> Tất cả bài viết</button>
+                        <button class="filter-chip" data-explore-filter="media"><i class="fa-solid fa-photo-film"></i> Ảnh & Video</button>
+                        <button class="filter-chip" data-explore-filter="videos"><i class="fa-solid fa-video"></i> Video</button>
+                    </div>
+                </div>
+
+                <!-- New Posts Alert Pill on Explore -->
+                <div id="exploreNewPostsAlert" class="new-posts-alert-pill" style="display: none;">
+                    <i class="fa-solid fa-circle-arrow-up"></i> <span id="exploreNewPostsAlertText">Có bài viết mới • Nhấn để cập nhật</span>
+                </div>
+
+                <!-- EXPLORE POSTS FEED -->
+                <div class="posts-feed" id="exploreFeed">
+                    <div class="feed-loader" id="exploreLoader">
+                        <div class="spinner"></div>
+                        <p>Đang tải bài viết khám phá...</p>
                     </div>
                 </div>
             </section>

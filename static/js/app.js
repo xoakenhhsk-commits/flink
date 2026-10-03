@@ -155,6 +155,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeImageLightbox = document.getElementById('closeImageLightbox');
     const lightboxBody = document.getElementById('lightboxBody');
 
+    // --- REALTIME & EXPLORE STATE & ELEMENTS ---
+    let currentActiveView = 'feed';
+    let maxFeedPostId = 0;
+    let maxExplorePostId = 0;
+    let pendingFeedPosts = [];
+    let pendingExplorePosts = [];
+    let currentExploreFilter = 'all';
+    let exploreSearchQuery = '';
+    let exploreSearchDebounce = null;
+
+    const exploreView = document.getElementById('exploreView');
+    const exploreFeed = document.getElementById('exploreFeed');
+    const exploreLoader = document.getElementById('exploreLoader');
+    const feedNewPostsAlert = document.getElementById('feedNewPostsAlert');
+    const feedNewPostsAlertText = document.getElementById('feedNewPostsAlertText');
+    const exploreNewPostsAlert = document.getElementById('exploreNewPostsAlert');
+    const exploreNewPostsAlertText = document.getElementById('exploreNewPostsAlertText');
+    const exploreSearchInput = document.getElementById('exploreSearchInput');
+    const exploreFilterChips = document.querySelectorAll('.filter-chip[data-explore-filter]');
+
     // --- API HELPER ---
     async function apiFetch(url, options = {}) {
         options.headers = options.headers || {};
@@ -303,6 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function switchView(viewName) {
+        currentActiveView = viewName;
         navItems.forEach(n => {
             if (n.getAttribute('data-view') === viewName) {
                 n.classList.add('active');
@@ -313,9 +334,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         viewSections.forEach(sec => sec.style.display = 'none');
 
-        if (viewName === 'feed' || viewName === 'explore') {
+        if (viewName === 'feed') {
             document.getElementById('feedView').style.display = 'block';
             loadPosts();
+        } else if (viewName === 'explore') {
+            if (exploreView) exploreView.style.display = 'block';
+            loadExplore(currentExploreFilter, exploreSearchQuery);
         } else if (viewName === 'profile') {
             if (!currentUser) {
                 openAuth('login');
@@ -959,7 +983,12 @@ document.addEventListener('DOMContentLoaded', () => {
             quickPostText.value = '';
             removeMediaBtn.click();
             await loadPosts();
+            if (currentActiveView === 'explore') {
+                await loadExplore(currentExploreFilter, exploreSearchQuery);
+            }
+            await checkRealtimeUpdates();
             await loadTrending();
+            showToast('✨ Đã đăng bài viết mới thành công!');
         } catch (err) {
             alert(err.message);
         } finally {
@@ -1053,8 +1082,203 @@ document.addEventListener('DOMContentLoaded', () => {
             const postCard = createPostCard(post);
             postsFeed.appendChild(postCard);
             postObserver.observe(postCard);
+            if (post.id > maxFeedPostId) maxFeedPostId = post.id;
         });
     }
+
+    // --- EXPLORE VIEW LOGIC (KHÁM PHÁ THỜI GIAN THỰC) ---
+    async function loadExplore(filter = 'all', searchQuery = '') {
+        currentExploreFilter = filter;
+        exploreSearchQuery = searchQuery;
+        if (exploreLoader) exploreLoader.style.display = 'block';
+        try {
+            let url = '/api/posts?limit=30';
+            if (filter === 'media') url += '&filter_type=media';
+            if (filter === 'videos') url += '&filter_type=videos';
+            if (searchQuery.trim()) {
+                const cleanTag = searchQuery.trim().replace(/^#/, '');
+                url += `&tag=${encodeURIComponent(cleanTag)}`;
+            }
+            const res = await apiFetch(url);
+            const data = await res.json();
+            renderExplore(data.posts || []);
+        } catch (e) {
+            if (exploreFeed) exploreFeed.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:30px;">Không thể tải bài viết khám phá.</p>';
+        } finally {
+            if (exploreLoader) exploreLoader.style.display = 'none';
+        }
+    }
+
+    function renderExplore(posts) {
+        if (!exploreFeed) return;
+        exploreFeed.innerHTML = '';
+        if (posts.length === 0) {
+            exploreFeed.innerHTML = `
+                <div class="glass-card" style="padding: 40px; text-align: center; color: var(--text-secondary);">
+                    <i class="fa-solid fa-compass" style="font-size: 40px; margin-bottom: 12px; color: var(--primary);"></i>
+                    <p>Chưa có bài viết nào phù hợp trong mục Khám phá.</p>
+                </div>
+            `;
+            return;
+        }
+
+        posts.forEach(post => {
+            const postCard = createPostCard(post);
+            exploreFeed.appendChild(postCard);
+            postObserver.observe(postCard);
+            if (post.id > maxExplorePostId) maxExplorePostId = post.id;
+        });
+    }
+
+    // --- REALTIME POLLING ENGINE (ĐỒNG BỘ THỜI GIAN THỰC CHO TRANG CHỦ & KHÁM PHÁ) ---
+    async function checkRealtimeUpdates() {
+        if (document.hidden) return; // Tiết kiệm pin & mạng khi tab ẩn
+
+        // 1. Cập nhật thời gian thực cho Trang Chủ (Feed)
+        if (currentActiveView === 'feed') {
+            try {
+                const res = await apiFetch(`/api/posts/realtime?last_id=${maxFeedPostId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const newPosts = data.new_posts || [];
+                    if (newPosts.length > 0) {
+                        const isAtTop = window.scrollY < 250;
+                        if (isAtTop) {
+                            // Người dùng đang ở đầu trang -> Chèn ngay vào đầu danh sách với animation
+                            newPosts.forEach(post => {
+                                if (!postsFeed.querySelector(`.post-card[data-post-id="${post.id}"]`)) {
+                                    const card = createPostCard(post);
+                                    card.classList.add('new-post-incoming-animate');
+                                    postsFeed.insertBefore(card, postsFeed.firstChild);
+                                    postObserver.observe(card);
+                                }
+                                if (post.id > maxFeedPostId) maxFeedPostId = post.id;
+                            });
+                            if (feedNewPostsAlert) feedNewPostsAlert.style.display = 'none';
+                            pendingFeedPosts = [];
+                        } else {
+                            // Người dùng đang cuộn đọc bài cũ -> Hiển thị thanh thông báo bài mới
+                            newPosts.forEach(post => {
+                                if (!pendingFeedPosts.some(p => p.id === post.id)) {
+                                    pendingFeedPosts.push(post);
+                                }
+                                if (post.id > maxFeedPostId) maxFeedPostId = post.id;
+                            });
+                            if (feedNewPostsAlert && feedNewPostsAlertText) {
+                                feedNewPostsAlertText.textContent = `Có ${pendingFeedPosts.length} bài viết mới • Nhấn để xem ngay ↑`;
+                                feedNewPostsAlert.style.display = 'flex';
+                            }
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+        // 2. Cập nhật thời gian thực cho mục Khám Phá (Explore)
+        else if (currentActiveView === 'explore') {
+            try {
+                let url = `/api/posts/realtime?last_id=${maxExplorePostId}`;
+                if (currentExploreFilter === 'media') url += '&filter_type=media';
+                if (currentExploreFilter === 'videos') url += '&filter_type=videos';
+
+                const res = await apiFetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    const newPosts = data.new_posts || [];
+                    if (newPosts.length > 0) {
+                        const isAtTop = window.scrollY < 250;
+                        if (isAtTop) {
+                            newPosts.forEach(post => {
+                                if (exploreFeed && !exploreFeed.querySelector(`.post-card[data-post-id="${post.id}"]`)) {
+                                    const card = createPostCard(post);
+                                    card.classList.add('new-post-incoming-animate');
+                                    exploreFeed.insertBefore(card, exploreFeed.firstChild);
+                                    postObserver.observe(card);
+                                }
+                                if (post.id > maxExplorePostId) maxExplorePostId = post.id;
+                            });
+                            if (exploreNewPostsAlert) exploreNewPostsAlert.style.display = 'none';
+                            pendingExplorePosts = [];
+                        } else {
+                            newPosts.forEach(post => {
+                                if (!pendingExplorePosts.some(p => p.id === post.id)) {
+                                    pendingExplorePosts.push(post);
+                                }
+                                if (post.id > maxExplorePostId) maxExplorePostId = post.id;
+                            });
+                            if (exploreNewPostsAlert && exploreNewPostsAlertText) {
+                                exploreNewPostsAlertText.textContent = `Có ${pendingExplorePosts.length} bài viết mới • Nhấn để cập nhật ↑`;
+                                exploreNewPostsAlert.style.display = 'flex';
+                            }
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+    }
+
+    // Sự kiện nhấn thanh thông báo bài mới trên Feed
+    if (feedNewPostsAlert) {
+        feedNewPostsAlert.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            pendingFeedPosts.forEach(post => {
+                if (!postsFeed.querySelector(`.post-card[data-post-id="${post.id}"]`)) {
+                    const card = createPostCard(post);
+                    card.classList.add('new-post-incoming-animate');
+                    postsFeed.insertBefore(card, postsFeed.firstChild);
+                    postObserver.observe(card);
+                }
+            });
+            pendingFeedPosts = [];
+            feedNewPostsAlert.style.display = 'none';
+        });
+    }
+
+    // Sự kiện nhấn thanh thông báo bài mới trên Explore
+    if (exploreNewPostsAlert) {
+        exploreNewPostsAlert.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            pendingExplorePosts.forEach(post => {
+                if (exploreFeed && !exploreFeed.querySelector(`.post-card[data-post-id="${post.id}"]`)) {
+                    const card = createPostCard(post);
+                    card.classList.add('new-post-incoming-animate');
+                    exploreFeed.insertBefore(card, exploreFeed.firstChild);
+                    postObserver.observe(card);
+                }
+            });
+            pendingExplorePosts = [];
+            exploreNewPostsAlert.style.display = 'none';
+        });
+    }
+
+    // Lắng nghe bộ lọc chip trong Khám Phá
+    exploreFilterChips.forEach(chip => {
+        chip.addEventListener('click', () => {
+            exploreFilterChips.forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            const filter = chip.getAttribute('data-explore-filter');
+            loadExplore(filter, exploreSearchInput ? exploreSearchInput.value : '');
+        });
+    });
+
+    // Lắng nghe ô tìm kiếm Khám Phá
+    if (exploreSearchInput) {
+        exploreSearchInput.addEventListener('input', (e) => {
+            clearTimeout(exploreSearchDebounce);
+            exploreSearchDebounce = setTimeout(() => {
+                loadExplore(currentExploreFilter, e.target.value.trim());
+            }, 300);
+        });
+    }
+
+    // Khởi động chu kỳ đồng bộ Realtime (mỗi 3.5 giây tự động kiểm tra bài mới)
+    realtimePollingInterval = setInterval(checkRealtimeUpdates, 3500);
+
+    // Khi người dùng chuyển tab trình duyệt quay lại, lập tức kích hoạt cập nhật
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            checkRealtimeUpdates();
+        }
+    });
 
     function createPostCard(post) {
         const card = document.createElement('div');

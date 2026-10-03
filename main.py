@@ -759,6 +759,58 @@ async def get_posts(
     posts = [dict(r) for r in rows]
     return JSONResponse(content={"posts": posts})
 
+@app.get("/api/posts/realtime")
+async def get_realtime_posts(
+    request: Request,
+    last_id: int = 0,
+    filter_type: Optional[str] = None
+):
+    """API kiểm tra và đồng bộ bài viết mới theo thời gian thực (Realtime Polling)"""
+    user = get_current_user_optional(request)
+    current_user_id = user["id"] if user else 0
+    is_admin = user and user.get("role") == "admin"
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("CREATE TABLE IF NOT EXISTS deleted_posts (post_id INTEGER PRIMARY KEY, deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+
+    where_clauses = [
+        "u.is_active = 1",
+        "p.id > ?",
+        "p.id NOT IN (SELECT post_id FROM deleted_posts)"
+    ]
+    where_params = [last_id]
+
+    if not is_admin:
+        where_clauses.append("(p.privacy = 'public' OR p.user_id = ?)")
+        where_params.append(current_user_id)
+
+    if filter_type == "media":
+        where_clauses.append("(p.media_type IS NOT NULL AND p.media_type != 'none' AND p.media_url != '')")
+    elif filter_type == "videos":
+        where_clauses.append("p.media_type = 'video'")
+
+    where_sql = "WHERE " + " AND ".join(where_clauses)
+    all_params = [current_user_id] + where_params
+
+    cursor.execute(f"""
+        SELECT 
+            p.id, p.user_id, p.content, p.media_type, p.media_url, p.media_name, p.privacy, p.views_count, p.created_at,
+            u.username, u.display_name, u.avatar_url, u.role, u.is_verified,
+            (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as likes_count,
+            (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comments_count,
+            (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
+        FROM posts p
+        JOIN users u ON p.user_id = u.id
+        {where_sql}
+        ORDER BY p.id ASC
+    """, tuple(all_params))
+    rows = cursor.fetchall()
+    conn.close()
+
+    new_posts = [dict(r) for r in rows]
+    return JSONResponse(content={"new_posts": new_posts, "count": len(new_posts)})
+
 @app.post("/api/posts")
 async def create_post(
     request: Request,
