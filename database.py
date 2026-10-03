@@ -37,6 +37,14 @@ class PostgresCursorWrapper:
             converted_sql = re.sub(r'INSERT\s+OR\s+REPLACE\s+INTO\s+site_settings', 'INSERT INTO site_settings', converted_sql, flags=re.IGNORECASE)
             converted_sql += ' ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value'
 
+        # Đổi INSERT OR REPLACE INTO media_storage
+        if re.search(r'INSERT\s+OR\s+REPLACE\s+INTO\s+media_storage', converted_sql, re.IGNORECASE):
+            converted_sql = re.sub(r'INSERT\s+OR\s+REPLACE\s+INTO\s+media_storage', 'INSERT INTO media_storage', converted_sql, flags=re.IGNORECASE)
+            converted_sql += ' ON CONFLICT (file_path) DO UPDATE SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size'
+
+        # Đổi BLOB -> BYTEA
+        converted_sql = re.sub(r'\bBLOB\b', 'BYTEA', converted_sql, flags=re.IGNORECASE)
+
         # Chuyển đổi tham số ? sang %s
         converted_sql = converted_sql.replace('?', '%s')
 
@@ -48,7 +56,9 @@ class PostgresCursorWrapper:
         if is_insert and not has_returning and any(f" {tbl} " in f" {converted_sql} " or f"({tbl})" in converted_sql for tbl in insert_id_tables):
             converted_sql += ' RETURNING id'
             if params is not None:
-                self._cursor.execute(converted_sql, tuple(params))
+                import psycopg2
+                safe_params = [psycopg2.Binary(p) if isinstance(p, (bytes, bytearray)) else p for p in params]
+                self._cursor.execute(converted_sql, tuple(safe_params))
             else:
                 self._cursor.execute(converted_sql)
             try:
@@ -60,7 +70,9 @@ class PostgresCursorWrapper:
             return self
 
         if params is not None:
-            self._cursor.execute(converted_sql, tuple(params))
+            import psycopg2
+            safe_params = [psycopg2.Binary(p) if isinstance(p, (bytes, bytearray)) else p for p in params]
+            self._cursor.execute(converted_sql, tuple(safe_params))
         else:
             self._cursor.execute(converted_sql)
         return self

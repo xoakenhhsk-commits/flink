@@ -1,6 +1,8 @@
 -- LUMINA SOCIAL NETWORK - NEON POSTGRESQL MIGRATION DUMP
 -- Chạy toàn bộ file này trong tab 'SQL Editor' trên Neon Console
 
+DROP TABLE IF EXISTS media_storage CASCADE;
+DROP TABLE IF EXISTS deleted_posts CASCADE;
 DROP TABLE IF EXISTS verification_requests CASCADE;
 DROP TABLE IF EXISTS site_settings CASCADE;
 DROP TABLE IF EXISTS story_views CASCADE;
@@ -38,6 +40,11 @@ CREATE TABLE posts (
     views_count INTEGER DEFAULT 0,
     privacy VARCHAR(50) DEFAULT 'public',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE deleted_posts (
+    post_id INTEGER PRIMARY KEY,
+    deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE post_views (
@@ -112,6 +119,14 @@ CREATE TABLE verification_requests (
     admin_note TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE media_storage (
+    file_path VARCHAR(255) PRIMARY KEY,
+    content_type VARCHAR(100) NOT NULL,
+    data BYTEA NOT NULL,
+    file_size INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- DATA FOR users (5 rows)

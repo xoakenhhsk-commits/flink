@@ -11,7 +11,7 @@ def dump_to_postgres():
     
     # Drop existing tables if re-importing
     tables = [
-        "verification_requests", "site_settings", "story_views", "stories",
+        "media_storage", "deleted_posts", "verification_requests", "site_settings", "story_views", "stories",
         "comments", "post_likes", "post_views", "posts", "follows", "sessions", "users"
     ]
     for t in tables:
@@ -44,6 +44,11 @@ CREATE TABLE posts (
     views_count INTEGER DEFAULT 0,
     privacy VARCHAR(50) DEFAULT 'public',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE deleted_posts (
+    post_id INTEGER PRIMARY KEY,
+    deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE post_views (
@@ -119,6 +124,14 @@ CREATE TABLE verification_requests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE media_storage (
+    file_path VARCHAR(255) PRIMARY KEY,
+    content_type VARCHAR(100) NOT NULL,
+    data BYTEA NOT NULL,
+    file_size INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """)
 
     # Function to escape SQL string
@@ -127,12 +140,14 @@ CREATE TABLE verification_requests (
             return "NULL"
         if isinstance(v, (int, float)):
             return str(v)
+        if isinstance(v, (bytes, memoryview)):
+            return f"decode('{bytes(v).hex()}', 'hex')"
         val = str(v).replace("'", "''")
         return f"'{val}'"
 
-    # Export data in order of foreign key dependency
+    # Export data in order of foreign key dependency (media_storage will be auto-synced by app from uploads folder)
     export_tables = [
-        "users", "posts", "post_views", "post_likes", "comments",
+        "users", "posts", "deleted_posts", "post_views", "post_likes", "comments",
         "stories", "story_views", "follows", "sessions", "site_settings", "verification_requests"
     ]
 

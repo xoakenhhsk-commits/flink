@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from collections import Counter
 
-from fastapi import FastAPI, File, UploadFile, Request, Form, Depends, HTTPException, status
+from fastapi import FastAPI, File, UploadFile, Request, Form, Depends, HTTPException, status, Response
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -54,8 +54,125 @@ except Exception as e:
 app = FastAPI(title="Lumina Social Network Pro", version="2.0.0")
 
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+
+# --- DATABASE-BACKED MEDIA STORAGE (ĐẢM BẢO ẢNH/VIDEO LƯU VĨNH VIỄN TRONG CSDL) ---
+def save_media_to_storage(subfolder: str, filename: str, file_bytes: bytes, content_type: str = "") -> str:
+    ext = os.path.splitext(filename)[1].lower()
+    if not content_type:
+        import mimetypes
+        content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+    saved_filename = f"{secrets.token_hex(8)}_{int(datetime.now().timestamp())}{ext}"
+    rel_url = f"/uploads/{subfolder}/{saved_filename}"
+
+    # 1. Ghi vào ổ đĩa tạm để cache tải nhanh
+    try:
+        disk_path = os.path.join(UPLOAD_DIR, subfolder, saved_filename)
+        os.makedirs(os.path.dirname(disk_path), exist_ok=True)
+        with open(disk_path, "wb") as f:
+            f.write(file_bytes)
+    except Exception as e:
+        print("Disk cache write note:", e)
+
+    # 2. LƯU VĨNH VIỄN VÀO CƠ SỞ DỮ LIỆU (DATABASE BLOB/BYTEA)
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS media_storage (
+                file_path TEXT PRIMARY KEY,
+                content_type TEXT NOT NULL,
+                data BLOB,
+                file_size INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            INSERT OR REPLACE INTO media_storage (file_path, content_type, data, file_size)
+            VALUES (?, ?, ?, ?)
+        """, (rel_url, content_type, file_bytes, len(file_bytes)))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print("Lỗi lưu file vào CSDL:", e)
+
+    return rel_url
+
+def sync_existing_uploads_to_db():
+    src_uploads = os.path.join(BASE_DIR, "uploads")
+    if not os.path.exists(src_uploads):
+        return
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS media_storage (
+                file_path TEXT PRIMARY KEY,
+                content_type TEXT NOT NULL,
+                data BLOB,
+                file_size INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        import mimetypes
+        for root, dirs, files in os.walk(src_uploads):
+            for f in files:
+                full_path = os.path.join(root, f)
+                rel_path = os.path.relpath(full_path, src_uploads).replace("\\", "/")
+                rel_url = f"/uploads/{rel_path}"
+                try:
+                    if os.path.getsize(full_path) > 25 * 1024 * 1024:
+                        continue
+                    cursor.execute("SELECT 1 FROM media_storage WHERE file_path = ?", (rel_url,))
+                    if not cursor.fetchone():
+                        with open(full_path, "rb") as fh:
+                            f_bytes = fh.read()
+                        mime = mimetypes.guess_type(f)[0] or "application/octet-stream"
+                        cursor.execute("INSERT OR REPLACE INTO media_storage (file_path, content_type, data, file_size) VALUES (?, ?, ?, ?)",
+                                       (rel_url, mime, f_bytes, len(f_bytes)))
+                except Exception:
+                    pass
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print("Sync uploads note:", e)
+
+try:
+    sync_existing_uploads_to_db()
+except Exception:
+    pass
+
+@app.get("/uploads/{subfolder}/{filename}")
+async def serve_upload_file(subfolder: str, filename: str):
+    rel_url = f"/uploads/{subfolder}/{filename}"
+    disk_path = os.path.join(UPLOAD_DIR, subfolder, filename)
+
+    # 1. Nếu có sẵn trên ổ đĩa cache
+    if os.path.exists(disk_path):
+        return FileResponse(disk_path)
+
+    # 2. Nếu ổ đĩa bị Vercel xóa tạm, lấy trực tiếp từ CƠ SỞ DỮ LIỆU
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT content_type, data FROM media_storage WHERE file_path = ?", (rel_url,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            content_type = row["content_type"] or "application/octet-stream"
+            file_data = bytes(row["data"])
+            try:
+                os.makedirs(os.path.dirname(disk_path), exist_ok=True)
+                with open(disk_path, "wb") as f:
+                    f.write(file_data)
+            except Exception:
+                pass
+            return Response(content=file_data, media_type=content_type, headers={"Cache-Control": "public, max-age=31536000"})
+    except Exception as e:
+        print("Lỗi tải media từ CSDL:", e)
+
+    raise HTTPException(status_code=404, detail="Tệp không tồn tại")
 
 # --- AUTH HELPER & CRYPTOGRAPHIC SESSION TOKENS ---
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "lumina_social_super_secure_secret_key_2026")
@@ -183,11 +300,8 @@ async def update_settings(
     if logo_file and logo_file.filename:
         ext = os.path.splitext(logo_file.filename)[1].lower()
         if ext in [".png", ".jpg", ".jpeg", ".svg", ".webp", ".ico"]:
-            logo_name = f"brand_logo_{int(datetime.now().timestamp())}{ext}"
-            logo_path = os.path.join(UPLOAD_DIR, "branding", logo_name)
-            with open(logo_path, "wb") as f:
-                shutil.copyfileobj(logo_file.file, f)
-            logo_url = f"/uploads/branding/{logo_name}"
+            logo_bytes = await logo_file.read()
+            logo_url = save_media_to_storage("branding", logo_file.filename, logo_bytes, logo_file.content_type or "image/png")
             cursor.execute("INSERT OR REPLACE INTO site_settings (key, value) VALUES ('site_logo_url', ?)", (logo_url,))
 
     conn.commit()
@@ -321,11 +435,8 @@ async def update_profile(
     if avatar and avatar.filename:
         ext = os.path.splitext(avatar.filename)[1].lower()
         if ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
-            fname = f"avatar_{user['id']}_{secrets.token_hex(4)}{ext}"
-            fpath = os.path.join(UPLOAD_DIR, "avatars", fname)
-            with open(fpath, "wb") as f:
-                shutil.copyfileobj(avatar.file, f)
-            avatar_url = f"/uploads/avatars/{fname}"
+            av_bytes = await avatar.read()
+            avatar_url = save_media_to_storage("avatars", avatar.filename, av_bytes, avatar.content_type or "image/jpeg")
 
     conn = get_db()
     cursor = conn.cursor()
@@ -353,11 +464,8 @@ async def update_avatar_direct(
     if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
         return JSONResponse(content={"error": "Chỉ chấp nhận file ảnh (jpg, png, webp, gif)"}, status_code=400)
     
-    fname = f"avatar_{user['id']}_{secrets.token_hex(4)}{ext}"
-    fpath = os.path.join(UPLOAD_DIR, "avatars", fname)
-    with open(fpath, "wb") as f:
-        shutil.copyfileobj(avatar.file, f)
-    avatar_url = f"/uploads/avatars/{fname}"
+    av_bytes = await avatar.read()
+    avatar_url = save_media_to_storage("avatars", avatar.filename, av_bytes, avatar.content_type or "image/jpeg")
 
     conn = get_db()
     cursor = conn.cursor()
@@ -597,12 +705,8 @@ async def create_post(
         else:
             return JSONResponse(content={"error": "Định dạng tệp không được hỗ trợ"}, status_code=400)
 
-        saved_filename = f"{secrets.token_hex(8)}_{int(datetime.now().timestamp())}{ext}"
-        saved_path = os.path.join(UPLOAD_DIR, subfolder, saved_filename)
-        with open(saved_path, "wb") as f:
-            shutil.copyfileobj(media.file, f)
-
-        media_url = f"/uploads/{subfolder}/{saved_filename}"
+        file_bytes = await media.read()
+        media_url = save_media_to_storage(subfolder, filename, file_bytes, media.content_type or "")
         media_name = filename
 
     if not content.strip() and media_type == "none":
@@ -892,12 +996,8 @@ async def create_story(
     else:
         return JSONResponse(content={"error": "Story hỗ trợ các tệp ảnh hoặc video (ngắn / dài MP4, WEBM, MOV)"}, status_code=400)
 
-    saved_filename = f"story_{user['id']}_{secrets.token_hex(6)}{ext}"
-    saved_path = os.path.join(UPLOAD_DIR, "stories", saved_filename)
-    with open(saved_path, "wb") as f:
-        shutil.copyfileobj(media.file, f)
-
-    media_url = f"/uploads/stories/{saved_filename}"
+    file_bytes = await media.read()
+    media_url = save_media_to_storage("stories", filename, file_bytes, media.content_type or "")
     expires_at = (datetime.now() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
 
     conn = get_db()
