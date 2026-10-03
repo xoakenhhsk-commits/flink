@@ -129,6 +129,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const toastIcon = document.getElementById('toastIcon');
     const toastText = document.getElementById('toastText');
 
+    // Lightbox Elements
+    const imageLightboxModal = document.getElementById('imageLightboxModal');
+    const lightboxImg = document.getElementById('lightboxImg');
+    const lightboxTitle = document.getElementById('lightboxTitle');
+    const lightboxCaptionBar = document.getElementById('lightboxCaptionBar');
+    const lightboxCaptionText = document.getElementById('lightboxCaptionText');
+    const lightboxOpenTabBtn = document.getElementById('lightboxOpenTabBtn');
+    const lightboxDownloadBtn = document.getElementById('lightboxDownloadBtn');
+    const closeImageLightbox = document.getElementById('closeImageLightbox');
+    const lightboxBody = document.getElementById('lightboxBody');
+
     // --- API HELPER ---
     async function apiFetch(url, options = {}) {
         options.headers = options.headers || {};
@@ -520,6 +531,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const video = document.createElement('video');
             video.src = story.media_url;
             video.playsInline = true;
+            video.setAttribute('playsinline', '');
+            video.setAttribute('webkit-playsinline', '');
             video.autoplay = true;
             video.muted = isStoryMuted;
             video.style.maxWidth = '100%';
@@ -732,8 +745,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const isVideo = file.type.startsWith('video/');
             const url = URL.createObjectURL(file);
             storyFilePreview.innerHTML = isVideo 
-                ? `<video src="${url}" controls style="max-height: 200px; width: 100%; object-fit: contain; border-radius: 8px; background: #000;"></video>`
-                : `<img src="${url}" style="max-height: 200px; width: 100%; object-fit: contain; border-radius: 8px;">`;
+                ? `<video src="${url}" controls playsinline webkit-playsinline style="max-height: 200px; width: 100%; object-fit: contain; border-radius: 8px; background: #000;"></video>`
+                : `<img src="${url}" style="max-height: 200px; width: 100%; object-fit: contain; border-radius: 8px; cursor: zoom-in;" title="Xem trước ảnh">`;
+            if (!isVideo) {
+                const sImg = storyFilePreview.querySelector('img');
+                if (sImg) sImg.onclick = () => openImageLightbox(url, 'Xem trước ảnh Story');
+            }
         }
     });
 
@@ -828,9 +845,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(file);
 
         if (file.type.startsWith('image/')) {
-            mediaPreviewContent.innerHTML = `<img src="${url}" style="max-height: 240px; border-radius: 8px; object-fit: contain;">`;
+            mediaPreviewContent.innerHTML = `<img src="${url}" style="max-height: 240px; border-radius: 8px; object-fit: contain; cursor: zoom-in;" title="Nhấp để xem ảnh đầy đủ">`;
+            const pImg = mediaPreviewContent.querySelector('img');
+            if (pImg) pImg.onclick = () => openImageLightbox(url, 'Xem trước ảnh tải lên');
         } else if (file.type.startsWith('video/')) {
-            mediaPreviewContent.innerHTML = `<video src="${url}" controls style="max-height: 240px; border-radius: 8px; width: 100%;"></video>`;
+            mediaPreviewContent.innerHTML = `<video src="${url}" controls playsinline webkit-playsinline style="max-height: 240px; border-radius: 8px; width: 100%;"></video>`;
         } else if (file.type.startsWith('audio/')) {
             mediaPreviewContent.innerHTML = `
                 <div style="padding: 16px; background: rgba(99, 102, 241, 0.15); border-radius: 8px;">
@@ -964,9 +983,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Media Element
         let mediaHtml = '';
         if (post.media_type === 'image') {
-            mediaHtml = `<div class="post-media-container"><img src="${post.media_url}" class="post-media-img" loading="lazy" alt="Media"></div>`;
+            mediaHtml = `<div class="post-media-container"><img src="${post.media_url}" class="post-media-img" loading="lazy" alt="Media" title="Nhấp để xem ảnh đầy đủ"></div>`;
         } else if (post.media_type === 'video') {
-            mediaHtml = `<div class="post-media-container"><video src="${post.media_url}" controls class="post-media-video"></video></div>`;
+            mediaHtml = `<div class="post-media-container"><video src="${post.media_url}" controls playsinline webkit-playsinline preload="metadata" class="post-media-video"></video></div>`;
         } else if (post.media_type === 'audio') {
             mediaHtml = `
                 <div class="post-media-container">
@@ -1048,6 +1067,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 filterByTag(hl.dataset.tag);
             });
         });
+
+        // Click to open image in Lightbox
+        if (post.media_type === 'image') {
+            const imgEl = card.querySelector('.post-media-img');
+            if (imgEl) {
+                imgEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openImageLightbox(post.media_url, post.content, post.display_name, post.username);
+                });
+            }
+        }
 
         // Like Button
         const likeBtn = card.querySelector('.like-btn');
@@ -1372,6 +1402,13 @@ document.addEventListener('DOMContentLoaded', () => {
         profileDisplayName.innerHTML = `${escapeHtml(user.display_name)}${getVerifiedBadge(user.is_verified, 22)}`;
         profileUsername.textContent = '@' + user.username;
         profileAvatar.src = user.avatar_url;
+        profileAvatar.style.cursor = 'zoom-in';
+        profileAvatar.title = 'Nhấp để xem ảnh đại diện';
+        profileAvatar.onclick = () => {
+            if (user.avatar_url) {
+                openImageLightbox(user.avatar_url, `Ảnh đại diện của ${user.display_name}`, user.display_name, user.username);
+            }
+        };
         profileBio.textContent = user.bio || (isSelf ? 'Chưa có tiểu sử giới thiệu. Nhấn Chỉnh sửa để thêm!' : 'Người dùng này chưa cập nhật tiểu sử.');
         if (user.role === 'admin') {
             profileRole.textContent = 'Quản trị viên';
@@ -1908,6 +1945,85 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // --- IMAGE LIGHTBOX VIEWER ---
+    function openImageLightbox(url, caption = '', author = '', handle = '') {
+        if (!url || !imageLightboxModal) return;
+        lightboxImg.src = url;
+        if (lightboxOpenTabBtn) lightboxOpenTabBtn.href = url;
+        
+        if (lightboxDownloadBtn) {
+            lightboxDownloadBtn.href = url;
+            const filename = (url.split('/').pop() || 'lumina-photo.jpg').split('?')[0];
+            lightboxDownloadBtn.setAttribute('download', filename);
+        }
+
+        if (lightboxTitle) {
+            if (author) {
+                lightboxTitle.textContent = `${author}${handle ? ' (@' + handle + ')' : ''}`;
+            } else {
+                lightboxTitle.textContent = 'Xem ảnh chi tiết';
+            }
+        }
+
+        if (lightboxCaptionBar && lightboxCaptionText) {
+            if (caption && caption.trim()) {
+                lightboxCaptionText.textContent = caption.trim();
+                lightboxCaptionBar.style.display = 'block';
+            } else {
+                lightboxCaptionBar.style.display = 'none';
+            }
+        }
+
+        imageLightboxModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeImageLightboxModal() {
+        if (!imageLightboxModal) return;
+        imageLightboxModal.style.display = 'none';
+        if (lightboxImg) lightboxImg.src = '';
+        document.body.style.overflow = '';
+    }
+
+    if (closeImageLightbox) {
+        closeImageLightbox.addEventListener('click', closeImageLightboxModal);
+    }
+    if (imageLightboxModal) {
+        imageLightboxModal.addEventListener('click', (e) => {
+            if (e.target === imageLightboxModal || e.target === lightboxBody || (e.target && e.target.id === 'lightboxContainer')) {
+                closeImageLightboxModal();
+            }
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && imageLightboxModal && imageLightboxModal.style.display === 'flex') {
+            closeImageLightboxModal();
+        }
+    });
+
+    // Global click listener for any post media image
+    document.addEventListener('click', (e) => {
+        const imgTarget = e.target.closest('.post-media-img');
+        if (imgTarget && imgTarget.tagName === 'IMG') {
+            const src = imgTarget.src || imgTarget.getAttribute('src');
+            if (src && (!imageLightboxModal || imageLightboxModal.style.display !== 'flex')) {
+                const card = imgTarget.closest('.post-card');
+                let caption = '';
+                let author = '';
+                let handle = '';
+                if (card) {
+                    const postContent = card.querySelector('.post-content');
+                    if (postContent) caption = postContent.innerText;
+                    const metaName = card.querySelector('.post-meta-name');
+                    if (metaName) author = metaName.innerText;
+                    const metaHandle = card.querySelector('.post-meta-handle');
+                    if (metaHandle) handle = metaHandle.innerText.split('·')[0].replace('@', '').trim();
+                }
+                openImageLightbox(src, caption, author, handle);
+            }
+        }
+    });
 
     // --- UTILITIES ---
     function formatPostContent(rawText) {
