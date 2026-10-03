@@ -1540,7 +1540,7 @@ body.dark-theme {
         padding-bottom: 90px; /* Space for bottom nav */
     }
     .mobile-header {
-        display: flex;
+        display: none; /* Mặc định tắt (ẩn) giúp giao diện mở rộng tối đa và thoáng đãng */
         justify-content: space-between;
         align-items: center;
         padding: 12px 14px;
@@ -1548,6 +1548,9 @@ body.dark-theme {
         background: var(--bg-card);
         border-radius: var(--radius-md);
         border: 1px solid var(--border-color);
+    }
+    body.show-mobile-header .mobile-header {
+        display: flex;
     }
     .mobile-actions { display: flex; gap: 8px; }
     .icon-circle {

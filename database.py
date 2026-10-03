@@ -298,7 +298,8 @@ def init_db():
         'site_name': 'Lumina',
         'site_logo_icon': 'fa-solid fa-bolt',
         'site_logo_url': '',
-        'site_description': 'Mạng Xã Hội Thế Hệ Mới — Đẳng Cấp & Tốc Độ'
+        'site_description': 'Mạng Xã Hội Thế Hệ Mới — Đẳng Cấp & Tốc Độ',
+        'show_mobile_header': '0'
     }
     for k, v in default_settings.items():
         cursor.execute("INSERT OR IGNORE INTO site_settings (key, value) VALUES (?, ?)", (k, v))

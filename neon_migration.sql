@@ -233,11 +233,12 @@ INSERT INTO sessions (token, user_id, created_at) VALUES ('810d6ee64d97116a8a94c
 INSERT INTO sessions (token, user_id, created_at) VALUES ('47f2789a94f6a067859da3df7245c6837b174d6f2e786e25bbc018c0703e4ca6', 6, '2026-10-02 11:08:49');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('cd4abc23afb8f5885450649eff8f008a6656908294b8ee0107bdfc60430b4b98', 3, '2026-10-02 11:20:19');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('7f34d073a5e2e27c611fd9fa8e76699985cec63af1da75a60c083bcaaf85896c', 3, '2026-10-02 11:20:19');
--- DATA FOR site_settings (4 rows)
+-- DATA FOR site_settings (5 rows)
 INSERT INTO site_settings (key, value) VALUES ('site_name', 'FLINK');
 INSERT INTO site_settings (key, value) VALUES ('site_description', 'Mạng Xã Hội Thế Hệ Mới — Đẳng Cấp & Tốc Độ');
 INSERT INTO site_settings (key, value) VALUES ('site_logo_icon', 'fa-solid fa-bolt');
 INSERT INTO site_settings (key, value) VALUES ('site_logo_url', '/uploads/branding/brand_logo_1790937843.png');
+INSERT INTO site_settings (key, value) VALUES ('show_mobile_header', '0');
 -- DATA FOR verification_requests (2 rows)
 INSERT INTO verification_requests (id, user_id, reason, status, admin_note, created_at, updated_at) VALUES (1, 4, 'Toi la KOL cong nghe muon xac minh chinh chu', 'approved', 'Đã được Quản trị viên phê duyệt', '2026-10-02 10:46:21', '2026-10-02 10:54:27');
 INSERT INTO verification_requests (id, user_id, reason, status, admin_note, created_at, updated_at) VALUES (2, 3, 'Bạn hãy giúp tôi mở tích xanh vi kênh của tôi là KOL', 'approved', 'Phe duyet', '2026-10-02 10:47:21', '2026-10-02 10:49:04');

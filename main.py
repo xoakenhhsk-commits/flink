@@ -284,6 +284,7 @@ async def update_settings(
     site_name: str = Form(None),
     site_description: str = Form(None),
     site_logo_icon: str = Form(None),
+    show_mobile_header: str = Form(None),
     logo_file: UploadFile = File(None)
 ):
     require_admin(request)
@@ -296,6 +297,9 @@ async def update_settings(
         cursor.execute("INSERT OR REPLACE INTO site_settings (key, value) VALUES ('site_description', ?)", (site_description.strip(),))
     if site_logo_icon and site_logo_icon.strip():
         cursor.execute("INSERT OR REPLACE INTO site_settings (key, value) VALUES ('site_logo_icon', ?)", (site_logo_icon.strip(),))
+    if show_mobile_header is not None:
+        val = "1" if str(show_mobile_header).strip() in ["1", "true", "on"] else "0"
+        cursor.execute("INSERT OR REPLACE INTO site_settings (key, value) VALUES ('show_mobile_header', ?)", (val,))
 
     if logo_file and logo_file.filename:
         ext = os.path.splitext(logo_file.filename)[1].lower()

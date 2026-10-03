@@ -19,6 +19,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMediaFile = null;
     let activeTag = null;
 
+    // Apply cached mobile header toggle (default is hidden/0)
+    if (localStorage.getItem('lumina_show_mobile_header') === '1') {
+        document.body.classList.add('show-mobile-header');
+    } else {
+        document.body.classList.remove('show-mobile-header');
+    }
+
     // --- ELEMENTS ---
     const navItems = document.querySelectorAll('.nav-item[data-view], .mobile-nav-item[data-view]');
     const viewSections = document.querySelectorAll('.view-section');
@@ -199,6 +206,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const iconHtml = `<i class="${s.site_logo_icon}"></i>`;
                 if (sidebarBrandIcon) sidebarBrandIcon.innerHTML = iconHtml;
                 if (mobileBrandIcon) mobileBrandIcon.innerHTML = iconHtml;
+            }
+
+            // Thanh tiêu đề trên di động: mặc định tắt (ẩn) cho không gian rộng hơn
+            if (s.show_mobile_header === '1' || s.show_mobile_header === 'true') {
+                document.body.classList.add('show-mobile-header');
+                localStorage.setItem('lumina_show_mobile_header', '1');
+            } else {
+                document.body.classList.remove('show-mobile-header');
+                localStorage.setItem('lumina_show_mobile_header', '0');
             }
         } catch (e) {
             console.error('Settings load err', e);

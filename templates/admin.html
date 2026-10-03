@@ -249,10 +249,22 @@
                         <label>Tải lên tệp Logo mới (Ảnh PNG, SVG hoặc JPG)</label>
                         <input type="file" id="settingLogoFile" accept="image/*">
                     </div>
-                    <div id="settingsSaveSuccess" style="display: none; color: var(--success); font-weight: 700; margin-bottom: 14px;">
-                        <i class="fa-solid fa-circle-check"></i> Đã lưu cập nhật tên và logo thành công!
+                    <div class="input-group" style="padding: 16px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 20px;">
+                        <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 14px; font-weight: 700; color: var(--text-primary);"><i class="fa-solid fa-mobile-screen"></i> Thanh Tiêu Đề Trên Di Động (Mobile Header Bar)</span>
+                            <select id="settingShowMobileHeader" style="padding: 8px 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: white; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer;">
+                                <option value="0">Tắt (Ẩn thanh tiêu đề — Mặc định, giúp không gian rộng hơn)</option>
+                                <option value="1">Bật (Hiển thị thanh tiêu đề ở đầu trang điện thoại)</option>
+                            </select>
+                        </label>
+                        <p style="color: var(--text-secondary); font-size: 12px; margin: 0; line-height: 1.5;">
+                            Mặc định là <strong>Tắt (Ẩn)</strong> để giao diện ứng dụng trên điện thoại rộng rãi, thoáng mắt tối đa. Người dùng di động vẫn sử dụng đầy đủ các nút ở thanh điều hướng dưới đáy màn hình. Quản trị viên có thể Bật/Tắt tùy ý.
+                        </p>
                     </div>
-                    <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi thương hiệu</button>
+                    <div id="settingsSaveSuccess" style="display: none; color: var(--success); font-weight: 700; margin-bottom: 14px;">
+                        <i class="fa-solid fa-circle-check"></i> Đã lưu cập nhật tên, logo và cài đặt giao diện thành công!
+                    </div>
+                    <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi thương hiệu & giao diện</button>
                 </form>
             </div>
         </div>
@@ -342,6 +354,7 @@
                 document.getElementById('settingSiteName').value = sData.site_name || 'Lumina';
                 document.getElementById('settingLogoIcon').value = sData.site_logo_icon || 'fa-solid fa-bolt';
                 document.getElementById('settingSiteDesc').value = sData.site_description || '';
+                document.getElementById('settingShowMobileHeader').value = (sData.show_mobile_header === '1' || sData.show_mobile_header === 'true') ? '1' : '0';
             }
 
             async function loadVerifications() {
@@ -602,11 +615,14 @@
                 fd.append('site_name', document.getElementById('settingSiteName').value.trim());
                 fd.append('site_logo_icon', document.getElementById('settingLogoIcon').value.trim());
                 fd.append('site_description', document.getElementById('settingSiteDesc').value.trim());
+                const showHeaderVal = document.getElementById('settingShowMobileHeader').value;
+                fd.append('show_mobile_header', showHeaderVal);
                 const file = document.getElementById('settingLogoFile').files[0];
                 if (file) fd.append('logo_file', file);
 
                 const res = await apiFetch('/api/admin/settings', { method: 'POST', body: fd });
                 if (res.ok) {
+                    localStorage.setItem('lumina_show_mobile_header', showHeaderVal);
                     const msg = document.getElementById('settingsSaveSuccess');
                     msg.style.display = 'block';
                     setTimeout(() => msg.style.display = 'none', 3000);
