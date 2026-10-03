@@ -917,11 +917,92 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- 6. POST CREATION WITH PRIVACY & HASHTAGS ---
+    let currentVideoBanner = '';
+
+    // Tự động trích xuất khung hình banner (poster) chất lượng cao từ video bằng HTML5 Canvas
+    async function extractVideoThumbnail(file, atTime = 0.6) {
+        if (!file) return '';
+        return new Promise((resolve) => {
+            try {
+                const video = document.createElement('video');
+                video.preload = 'auto';
+                video.muted = true;
+                video.playsInline = true;
+                video.setAttribute('webkit-playsinline', 'true');
+                const blobUrl = URL.createObjectURL(file);
+                video.src = blobUrl;
+
+                let finished = false;
+                const finish = (result) => {
+                    if (finished) return;
+                    finished = true;
+                    try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+                    resolve(result || '');
+                };
+
+                const timer = setTimeout(() => {
+                    finish('');
+                }, 4000);
+
+                video.onloadeddata = () => {
+                    const dur = video.duration || 1;
+                    const seek = Math.min(atTime, Math.max(0.1, dur - 0.1));
+                    video.currentTime = seek;
+                };
+
+                video.onseeked = () => {
+                    clearTimeout(timer);
+                    try {
+                        const targetWidth = Math.min(video.videoWidth || 800, 1080);
+                        const scale = targetWidth / (video.videoWidth || targetWidth);
+                        const targetHeight = Math.round((video.videoHeight || 450) * scale);
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = targetWidth;
+                        canvas.height = targetHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+                        finish(dataUrl);
+                    } catch (e) {
+                        finish('');
+                    }
+                };
+
+                video.onerror = () => {
+                    clearTimeout(timer);
+                    finish('');
+                };
+            } catch (e) {
+                resolve('');
+            }
+        });
+    }
+
     [postImageInput, postVideoInput, postAudioInput].forEach(input => {
-        input.addEventListener('change', (e) => {
+        input.addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
                 currentMediaFile = e.target.files[0];
+                currentVideoBanner = '';
+                const fileName = (currentMediaFile.name || '').toLowerCase();
+                const fileType = currentMediaFile.type || '';
+                const isVideo = fileType.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v|3gp|ts|ogv)$/i.test(fileName);
+                
                 renderMediaPreview(currentMediaFile);
+
+                if (isVideo) {
+                    try {
+                        currentVideoBanner = await extractVideoThumbnail(currentMediaFile, 0.6);
+                        if (currentVideoBanner) {
+                            const previewVid = mediaPreviewContent.querySelector('video');
+                            if (previewVid) {
+                                previewVid.poster = currentVideoBanner;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('Lỗi trích xuất poster video:', err);
+                    }
+                }
             }
         });
     });
@@ -934,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const type = file.type || '';
 
         const isImage = type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|bmp|svg)$/i.test(name);
-        const isVideo = type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v|3gp)$/i.test(name);
+        const isVideo = type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v|3gp|ts|ogv)$/i.test(name);
         const isAudio = type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(name);
 
         if (isImage) {
@@ -942,7 +1023,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const pImg = mediaPreviewContent.querySelector('img');
             if (pImg) pImg.onclick = () => openImageLightbox(url, 'Xem trước ảnh tải lên');
         } else if (isVideo) {
-            mediaPreviewContent.innerHTML = `<video src="${url}" controls playsinline webkit-playsinline style="max-height: 240px; border-radius: 8px; width: 100%;"></video>`;
+            mediaPreviewContent.innerHTML = `
+                <div style="position:relative; width: 100%;">
+                    <video src="${url}" ${currentVideoBanner ? `poster="${currentVideoBanner}"` : ''} controls playsinline webkit-playsinline style="max-height: 260px; border-radius: 8px; width: 100%; background: #000;"></video>
+                    <div style="position:absolute; bottom: 10px; right: 12px; background: rgba(0,0,0,0.65); padding: 3px 8px; border-radius: 4px; font-size: 11px; color: #fff; pointer-events: none;">
+                        <i class="fa-solid fa-camera"></i> Tự động lấy Banner
+                    </div>
+                </div>
+            `;
         } else if (isAudio) {
             mediaPreviewContent.innerHTML = `
                 <div style="padding: 16px; background: rgba(99, 102, 241, 0.15); border-radius: 8px;">
@@ -955,6 +1043,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     removeMediaBtn.addEventListener('click', () => {
         currentMediaFile = null;
+        currentVideoBanner = '';
         postImageInput.value = '';
         postVideoInput.value = '';
         postAudioInput.value = '';
@@ -1027,7 +1116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Hàm tải lên tệp lớn theo từng phân đoạn (Chunked Upload) cho video dung lượng lớn 10MB - 100MB+ không giới hạn
-    async function uploadLargeFileInChunks(file, onProgress) {
+    async function uploadLargeFileInChunks(file, videoBanner, onProgress) {
         const chunkSize = 2.5 * 1024 * 1024; // 2.5MB per chunk (an toàn tuyệt đối dưới trần 4.5MB của Vercel)
         const totalChunks = Math.ceil(file.size / chunkSize);
         const uploadId = 'up_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
@@ -1044,6 +1133,9 @@ document.addEventListener('DOMContentLoaded', () => {
             chunkFd.append('total_chunks', totalChunks);
             chunkFd.append('filename', file.name);
             chunkFd.append('chunk', chunkBlob, file.name);
+            if (videoBanner && i === totalChunks - 1) {
+                chunkFd.append('video_banner', videoBanner);
+            }
 
             if (onProgress) {
                 const percent = Math.round(((i + 1) / totalChunks) * 100);
@@ -1081,6 +1173,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const isVideo = currentMediaFile && (fileMime.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v|3gp|ts|ogv)$/i.test(fileName));
             const isAudio = currentMediaFile && (fileMime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(fileName));
 
+            // Trích xuất khung hình banner tự động nếu chưa có
+            if (isVideo && !currentVideoBanner) {
+                try {
+                    currentVideoBanner = await extractVideoThumbnail(currentMediaFile, 0.6);
+                } catch (e) {}
+            }
+
             let preUploadedMedia = null;
 
             // 1. Tự động nén ảnh chất lượng cao để dung lượng còn ~150KB, đăng tức thì
@@ -1090,7 +1189,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 2. Video hoặc Audio dung lượng lớn (> 3.5MB): Tự động chia nhỏ thành các phân đoạn (Chunked Upload)
             else if ((isVideo || isAudio) && currentMediaFile && currentMediaFile.size > 3.5 * 1024 * 1024) {
                 publishPostBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang tải video: 0%...';
-                preUploadedMedia = await uploadLargeFileInChunks(currentMediaFile, (pct, current, total) => {
+                preUploadedMedia = await uploadLargeFileInChunks(currentMediaFile, currentVideoBanner, (pct, current, total) => {
                     publishPostBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang tải video: ${pct}% (${current}/${total})...`;
                 });
             }
@@ -1098,11 +1197,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const formData = new FormData();
             formData.append('content', content);
             formData.append('privacy', privacy);
+            if (currentVideoBanner) {
+                formData.append('video_banner', currentVideoBanner);
+            }
 
             if (preUploadedMedia) {
                 // Đã upload chunk xong, truyền metadata để tạo bài viết ngay
                 formData.append('existing_media_url', preUploadedMedia.media_url);
-                formData.append('existing_media_data', preUploadedMedia.media_data || '');
+                formData.append('existing_media_data', preUploadedMedia.media_data || currentVideoBanner || '');
                 formData.append('existing_media_type', preUploadedMedia.media_type || (isVideo ? 'video' : 'audio'));
                 formData.append('existing_media_name', preUploadedMedia.filename || currentMediaFile.name);
             } else if (fileToUpload) {
@@ -1136,7 +1238,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 content: content,
                 media_type: detectedMediaType,
                 media_url: mediaUrl,
-                media_data: data.media_data || '',
+                media_data: (detectedMediaType === 'video' && currentVideoBanner) ? currentVideoBanner : (data.media_data || ''),
                 media_name: data.media_name || (fileToUpload ? fileToUpload.name : ''),
                 privacy: privacy,
                 views_count: 0,
@@ -1158,11 +1260,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (newPostObj.id > maxFeedPostId) maxFeedPostId = newPostObj.id;
             }
 
+            // Cập nhật số bài viết trên Trang Cá Nhân (Profile counter)
+            const profilePostsCount = document.getElementById('profilePostsCount');
+            if (profilePostsCount) {
+                const curCount = parseInt(profilePostsCount.textContent) || 0;
+                profilePostsCount.textContent = curCount + 1;
+            }
+
             quickPostText.value = '';
             removeMediaBtn.click();
             await loadPosts();
             if (currentActiveView === 'explore') {
                 await loadExplore(currentExploreFilter, exploreSearchQuery);
+            }
+            if (currentActiveView === 'profile' || (activeProfileUserId && currentUser && String(activeProfileUserId) === String(currentUser.id))) {
+                await loadProfilePosts(currentProfileTab || 'all');
             }
             await checkRealtimeUpdates();
             await loadTrending();
@@ -1540,9 +1652,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const videoSrc = getValidVideoSrc(post);
             const isWebm = (post.media_url && post.media_url.endsWith('.webm')) || (post.media_name && post.media_name.endsWith('.webm'));
             const videoType = isWebm ? 'video/webm' : 'video/mp4';
+            const hasPoster = post.media_data && (post.media_data.startsWith('data:image/') || post.media_data.startsWith('http') || post.media_data.startsWith('/'));
+            const videoPoster = hasPoster ? post.media_data : '';
             mediaHtml = `
                 <div class="post-media-container video-post-wrapper">
-                    <video controls playsinline webkit-playsinline preload="metadata" class="post-media-video">
+                    <video controls playsinline webkit-playsinline preload="metadata" ${videoPoster ? `poster="${videoPoster}"` : ''} class="post-media-video">
                         <source src="${videoSrc}" type="${videoType}">
                         Trình duyệt của bạn không hỗ trợ phát thẻ video này.
                     </video>
@@ -1889,7 +2003,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await apiFetch(url);
             const data = await res.json();
             userPostsFeed.innerHTML = '';
-            const posts = (data.posts || []).filter(p => !isPostDeleted(p.id));
+            let posts = (data.posts || []).filter(p => !isPostDeleted(p.id));
+
+            // Tự động hợp nhất bài viết từ kho Local Vault khi xem trang cá nhân của chính mình
+            // Đảm bảo bài viết mới tạo (ảnh, video, văn bản) xuất hiện tức thì trong Trang Cá Nhân
+            if (currentUser && String(targetId) === String(currentUser.id) && tab !== 'liked') {
+                const localVault = getLocalPostsVault();
+                if (localVault.length > 0) {
+                    const existingIds = new Set(posts.map(p => Number(p.id)));
+                    let userVaultPosts = localVault.filter(p => !existingIds.has(Number(p.id)) && !isPostDeleted(p.id) && String(p.user_id) === String(currentUser.id));
+                    if (tab === 'media') {
+                        userVaultPosts = userVaultPosts.filter(p => p.media_type && p.media_type !== 'none');
+                    }
+                    if (userVaultPosts.length > 0) {
+                        posts = [...userVaultPosts, ...posts];
+                        posts.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+                    }
+                }
+            }
+
             if (posts.length === 0) {
                 let emptyMsg = 'Chưa có bài viết nào.';
                 if (tab === 'media') emptyMsg = 'Chưa có ảnh hoặc video nào được đăng.';

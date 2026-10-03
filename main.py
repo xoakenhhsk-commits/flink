@@ -868,6 +868,7 @@ async def upload_chunk(
     chunk_index: int = Form(...),
     total_chunks: int = Form(...),
     filename: str = Form(...),
+    video_banner: str = Form(""),
     chunk: UploadFile = File(...)
 ):
     user = require_current_user(request)
@@ -923,8 +924,8 @@ async def upload_chunk(
         saved_media = save_media_to_storage(subfolder, filename, full_bytes, content_type)
         media_url = str(saved_media)
 
-        # Nếu video nhỏ hơn 4.5MB thì sinh data_url để phát tức thì 0ms
-        media_data = saved_media.data_url if len(full_bytes) < 4500000 else ""
+        # Lưu ảnh banner trích xuất từ khung hình video nếu có
+        media_data = video_banner.strip() if video_banner.strip() else (saved_media.data_url if len(full_bytes) < 4500000 else "")
 
         return JSONResponse(content={
             "status": "complete",
@@ -949,6 +950,7 @@ async def create_post(
     content: str = Form(""),
     privacy: str = Form("public"),
     media: UploadFile = File(None),
+    video_banner: str = Form(""),
     existing_media_url: str = Form(""),
     existing_media_data: str = Form(""),
     existing_media_type: str = Form(""),
@@ -966,7 +968,7 @@ async def create_post(
     # Nếu đã tải lên qua Chunked Upload (cho video lớn)
     if existing_media_url:
         media_url = existing_media_url
-        media_data = existing_media_data
+        media_data = video_banner.strip() or existing_media_data
         media_type = existing_media_type or "video"
         media_name = existing_media_name
     elif media and media.filename:
@@ -990,10 +992,11 @@ async def create_post(
         media_url = str(saved_media)
         media_name = filename
 
-        # Lưu bản sao Data URL vĩnh viễn trực tiếp vào CSDL cho cả hình ảnh và video/audio (< 4.5MB)
-        # Giúp dữ liệu lưu vĩnh viễn trong CSDL và phát ngay qua Blob URL không lo mất file trên Serverless
+        # Lưu ảnh banner khung hình video hoặc Data URL ảnh
         if media_type == "image":
             media_data = saved_media.data_url
+        elif media_type == "video" and video_banner.strip():
+            media_data = video_banner.strip()
         elif media_type in ["video", "audio"] and len(saved_media.file_bytes) < 4500000:
             media_data = saved_media.data_url
         else:

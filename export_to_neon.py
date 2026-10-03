@@ -11,7 +11,7 @@ def dump_to_postgres():
     
     # Drop existing tables if re-importing
     tables = [
-        "media_storage", "deleted_posts", "verification_requests", "site_settings", "story_views", "stories",
+        "upload_chunks", "media_storage", "deleted_posts", "verification_requests", "site_settings", "story_views", "stories",
         "comments", "post_likes", "post_views", "posts", "follows", "sessions", "users"
     ]
     for t in tables:
@@ -132,6 +132,15 @@ CREATE TABLE media_storage (
     data BYTEA NOT NULL,
     file_size INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS upload_chunks (
+    upload_id VARCHAR(255),
+    chunk_index INTEGER,
+    total_chunks INTEGER,
+    data BYTEA,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (upload_id, chunk_index)
 );
 """)
 
