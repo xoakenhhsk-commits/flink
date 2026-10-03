@@ -1,8 +1,16 @@
 // Lumina Social Network Pro — Enhanced Engine
 document.addEventListener('DOMContentLoaded', () => {
     // --- STATE ---
-    let currentUser = null;
     let token = localStorage.getItem('lumina_token');
+    let currentUser = null;
+    try {
+        const cachedUser = localStorage.getItem('lumina_user');
+        if (cachedUser) {
+            currentUser = JSON.parse(cachedUser);
+        }
+    } catch (e) {
+        currentUser = null;
+    }
     let storyGroups = [];
     let currentStoryGroupIndex = 0;
     let currentStoryIndex = 0;
@@ -146,20 +154,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (token) {
             options.headers['Authorization'] = `Bearer ${token}`;
         }
-        const res = await fetch(url, options);
-        if (res.status === 401 && token) {
-            localStorage.removeItem('lumina_token');
-            token = null;
-            currentUser = null;
-            updateAuthUI();
+        options.credentials = 'include';
+        try {
+            const res = await fetch(url, options);
+            if (res.status === 401 && token) {
+                if (url.includes('/api/auth/me')) {
+                    localStorage.removeItem('lumina_token');
+                    localStorage.removeItem('lumina_user');
+                    token = null;
+                    currentUser = null;
+                    updateAuthUI();
+                }
+            }
+            return res;
+        } catch (err) {
+            throw err;
         }
-        return res;
     }
 
     // --- 1. INITIALIZE & BRAND SETTINGS ---
     async function initApp() {
-        await loadSettings();
-        await checkAuth();
+        // Tải cấu hình thương hiệu và xác thực tài khoản song song để tốc độ nhanh nhất
+        await Promise.allSettled([loadSettings(), checkAuth()]);
         await loadStories();
         await loadTrending();
         await loadSuggestions();
@@ -190,14 +206,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function checkAuth() {
+        if (!token) {
+            currentUser = null;
+            localStorage.removeItem('lumina_user');
+            updateAuthUI();
+            return;
+        }
         try {
             const res = await apiFetch('/api/auth/me');
-            const data = await res.json();
-            currentUser = data.user;
-            updateAuthUI();
+            if (res.ok) {
+                const data = await res.json();
+                if (data.user) {
+                    currentUser = data.user;
+                    localStorage.setItem('lumina_user', JSON.stringify(currentUser));
+                    updateAuthUI();
+                } else {
+                    // Token không còn hợp lệ trên máy chủ
+                    token = null;
+                    currentUser = null;
+                    localStorage.removeItem('lumina_token');
+                    localStorage.removeItem('lumina_user');
+                    updateAuthUI();
+                }
+            }
         } catch (e) {
-            currentUser = null;
-            updateAuthUI();
+            console.warn('Lỗi mạng khi kiểm tra phiên đăng nhập, giữ phiên hiện tại:', e);
+            // Nếu mất mạng hoặc mạng chậm, giữ nguyên thông tin currentUser trong localStorage để không bị văng đăng nhập
         }
     }
 
@@ -237,6 +271,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (adminNavBtn) adminNavBtn.style.display = 'none';
             if (mobileAdminBtn) mobileAdminBtn.style.display = 'none';
         }
+    }
+
+    // Cập nhật giao diện tài khoản ngay lập tức từ bộ nhớ đệm (không bị chớp / mất trạng thái khi F5)
+    if (currentUser) {
+        updateAuthUI();
     }
 
     // --- 2. NAVIGATION (SPA VIEWS) ---
@@ -333,16 +372,25 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('password', password);
 
         try {
-            const res = await fetch('/api/auth/login', { method: 'POST', body: formData });
+            const res = await fetch('/api/auth/login', { method: 'POST', body: formData, credentials: 'include' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Đăng nhập thất bại');
 
             token = data.token;
             currentUser = data.user;
             localStorage.setItem('lumina_token', token);
+            localStorage.setItem('lumina_user', JSON.stringify(currentUser));
             updateAuthUI();
             authModal.style.display = 'none';
+            loginForm.reset();
+
+            // Tự động chuyển thẳng về trang chủ (feed) và tải dữ liệu mới
+            switchView('feed');
             loadPosts();
+            loadStories();
+
+            // Hiển thị thông báo đăng nhập thành công
+            showToast(`Đăng nhập thành công! Chào mừng ${currentUser.display_name || currentUser.username} quay lại.`);
         } catch (err) {
             loginError.textContent = err.message;
             loginError.style.display = 'block';
@@ -365,30 +413,29 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('password', password);
 
         try {
-            const res = await fetch('/api/auth/register', { method: 'POST', body: formData });
+            const res = await fetch('/api/auth/register', { method: 'POST', body: formData, credentials: 'include' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Đăng ký thất bại');
 
             token = data.token;
             currentUser = data.user;
             localStorage.setItem('lumina_token', token);
+            localStorage.setItem('lumina_user', JSON.stringify(currentUser));
             updateAuthUI();
             authModal.style.display = 'none';
+            registerForm.reset();
+
+            // Tự động chuyển thẳng về trang chủ (feed) và tải dữ liệu mới
+            switchView('feed');
             loadPosts();
+            loadStories();
+
+            // Hiển thị thông báo đăng ký thành công
+            showToast(`Đăng ký thành công! Chào mừng ${currentUser.display_name || currentUser.username} đến với Lumina.`);
         } catch (err) {
             registerError.textContent = err.message;
             registerError.style.display = 'block';
         }
-    });
-
-    logoutBtn.addEventListener('click', async () => {
-        if (!confirm('Bạn có chắc chắn muốn đăng xuất không?')) return;
-        await apiFetch('/api/auth/logout', { method: 'POST' });
-        token = null;
-        currentUser = null;
-        localStorage.removeItem('lumina_token');
-        updateAuthUI();
-        switchView('feed');
     });
 
     // --- 4. STORIES SYSTEM (24h) ---
@@ -1273,10 +1320,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Unified Logout Handler
     async function handleLogout() {
+        if (!confirm('Bạn có chắc chắn muốn đăng xuất tài khoản không?')) return;
         try {
             await apiFetch('/api/auth/logout', { method: 'POST' });
         } catch (e) {}
         localStorage.removeItem('lumina_token');
+        localStorage.removeItem('lumina_user');
         token = null;
         currentUser = null;
         updateAuthUI();
@@ -1576,6 +1625,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (res.ok && data.user) {
                 currentUser = data.user;
+                localStorage.setItem('lumina_user', JSON.stringify(currentUser));
                 updateAuthUI();
                 if (profileAvatar) profileAvatar.src = currentUser.avatar_url;
                 if (settingsAvatarPreview) settingsAvatarPreview.src = currentUser.avatar_url;
@@ -1862,6 +1912,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const d = await res.json();
                 if (res.ok && d.user) {
                     currentUser = d.user;
+                    localStorage.setItem('lumina_user', JSON.stringify(currentUser));
                     updateAuthUI();
                     loadProfile();
                     if (settingsProfileMsg) {

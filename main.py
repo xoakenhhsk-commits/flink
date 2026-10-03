@@ -3,6 +3,8 @@ import io
 import re
 import shutil
 import secrets
+import hmac
+import hashlib
 from datetime import datetime, timedelta
 from typing import Optional
 from collections import Counter
@@ -55,7 +57,32 @@ app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), na
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
-# --- AUTH HELPER ---
+# --- AUTH HELPER & CRYPTOGRAPHIC SESSION TOKENS ---
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "lumina_social_super_secure_secret_key_2026")
+
+def create_session_token(user_id: int) -> str:
+    ts = int(datetime.utcnow().timestamp())
+    nonce = secrets.token_hex(16)
+    raw = f"{user_id}:{ts}:{nonce}"
+    sig = hmac.new(SESSION_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
+    return f"{raw}:{sig}"
+
+def verify_session_token(token: str) -> Optional[int]:
+    try:
+        parts = token.split(":")
+        if len(parts) == 4:
+            user_id_str, ts_str, nonce, sig = parts
+            raw = f"{user_id_str}:{ts_str}:{nonce}"
+            expected_sig = hmac.new(SESSION_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(sig, expected_sig):
+                ts = int(ts_str)
+                # Valid for 365 days
+                if int(datetime.utcnow().timestamp()) - ts < 86400 * 365:
+                    return int(user_id_str)
+    except Exception:
+        pass
+    return None
+
 def get_current_user_optional(request: Request) -> Optional[dict]:
     auth_header = request.headers.get("Authorization")
     token = None
@@ -76,6 +103,25 @@ def get_current_user_optional(request: Request) -> Optional[dict]:
         WHERE s.token = ? AND u.is_active = 1
     """, (token,))
     row = cursor.fetchone()
+
+    # Fallback: check cryptographic signature if session row missing in temporary / restarted DB
+    if not row:
+        user_id = verify_session_token(token)
+        if user_id:
+            cursor.execute("""
+                SELECT id, username, display_name, email, avatar_url, bio, role, is_active, is_verified, created_at
+                FROM users
+                WHERE id = ? AND is_active = 1
+            """, (user_id,))
+            user_row = cursor.fetchone()
+            if user_row:
+                row = user_row
+                try:
+                    cursor.execute("INSERT OR REPLACE INTO sessions (token, user_id) VALUES (?, ?)", (token, user_id))
+                    conn.commit()
+                except Exception:
+                    pass
+
     conn.close()
     if row:
         return dict(row)
@@ -176,15 +222,15 @@ async def register(
         """, (username, display_name, email, hash_password(password), "/static/default-avatar.svg", "user"))
         user_id = cursor.lastrowid
 
-        token = secrets.token_hex(32)
-        cursor.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, user_id))
+        token = create_session_token(user_id)
+        cursor.execute("INSERT OR REPLACE INTO sessions (token, user_id) VALUES (?, ?)", (token, user_id))
         conn.commit()
 
         cursor.execute("SELECT id, username, display_name, email, avatar_url, bio, role, is_verified, created_at FROM users WHERE id = ?", (user_id,))
         user_data = dict(cursor.fetchone())
 
         response = JSONResponse(content={"status": "ok", "token": token, "user": user_data})
-        response.set_cookie(key="session_token", value=token, max_age=86400*30, httponly=True)
+        response.set_cookie(key="session_token", value=token, max_age=86400*365, httponly=True, samesite="lax")
         return response
     finally:
         conn.close()
@@ -211,12 +257,12 @@ async def login(
         if not user.get("is_active"):
             return JSONResponse(content={"error": "Tài khoản đã bị tạm khóa bởi quản trị viên"}, status_code=403)
 
-        token = secrets.token_hex(32)
-        cursor.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, user["id"]))
+        token = create_session_token(user["id"])
+        cursor.execute("INSERT OR REPLACE INTO sessions (token, user_id) VALUES (?, ?)", (token, user["id"]))
         conn.commit()
 
         response = JSONResponse(content={"status": "ok", "token": token, "user": user})
-        response.set_cookie(key="session_token", value=token, max_age=86400*30, httponly=True)
+        response.set_cookie(key="session_token", value=token, max_age=86400*365, httponly=True, samesite="lax")
         return response
     finally:
         conn.close()
@@ -238,7 +284,7 @@ async def logout(request: Request):
         conn.close()
 
     response = JSONResponse(content={"status": "ok"})
-    response.delete_cookie(key="session_token")
+    response.delete_cookie(key="session_token", samesite="lax")
     return response
 
 @app.get("/api/auth/me")
