@@ -1075,6 +1075,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const detectedMediaType = data.media_type || (isVideo ? 'video' : isImage ? 'image' : 'audio');
             const mediaUrl = data.media_url || (fileToUpload ? URL.createObjectURL(fileToUpload) : '');
 
+            // Cache Blob URL cho video để tác giả phát ngay lập tức 0ms không cần tải lại
+            if (isVideo && fileToUpload && data.post_id) {
+                try {
+                    videoBlobCache.set(String(data.post_id), URL.createObjectURL(fileToUpload));
+                } catch (e) {}
+            }
+
             // Tạo object bài viết đầy đủ để lưu vào Local Vault và hiển thị tức thì 0ms
             const newPostObj = {
                 id: data.post_id,
@@ -1087,6 +1094,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 content: content,
                 media_type: detectedMediaType,
                 media_url: mediaUrl,
+                media_data: data.media_data || '',
                 media_name: data.media_name || (fileToUpload ? fileToUpload.name : ''),
                 privacy: privacy,
                 views_count: 0,
@@ -1438,6 +1446,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Bộ nhớ đệm URL Blob Video trên trình duyệt (giúp phát mượt mà, tua tức thì, không bị lỗi 404 hay hạn chế DataURL)
+    const videoBlobCache = new Map();
+
+    function b64toBlob(dataUrl) {
+        const parts = dataUrl.split(',');
+        const mime = (parts[0].match(/:(.*?);/) || [])[1] || 'video/mp4';
+        const binaryStr = atob(parts[1]);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+        }
+        return new Blob([bytes], { type: mime });
+    }
+
+    function getValidVideoSrc(post) {
+        if (!post) return '';
+        const postId = String(post.id);
+        if (videoBlobCache.has(postId)) {
+            return videoBlobCache.get(postId);
+        }
+        if (post.media_data && post.media_data.startsWith('data:video/')) {
+            try {
+                const blob = b64toBlob(post.media_data);
+                const blobUrl = URL.createObjectURL(blob);
+                videoBlobCache.set(postId, blobUrl);
+                return blobUrl;
+            } catch (err) {
+                console.warn('Video blob decode note:', err);
+            }
+        }
+        return post.media_url || '';
+    }
+
     function createPostCard(post) {
         const card = document.createElement('div');
         card.className = 'post-card glass-card';
@@ -1450,9 +1492,20 @@ document.addEventListener('DOMContentLoaded', () => {
         // Media Element
         let mediaHtml = '';
         if (post.media_type === 'image') {
-            mediaHtml = `<div class="post-media-container"><img src="${post.media_url}" class="post-media-img" loading="lazy" alt="Media" title="Nhấp để xem ảnh đầy đủ"></div>`;
+            const imgSrc = post.media_data || post.media_url;
+            mediaHtml = `<div class="post-media-container"><img src="${imgSrc}" class="post-media-img" loading="lazy" alt="Media" title="Nhấp để xem ảnh đầy đủ"></div>`;
         } else if (post.media_type === 'video') {
-            mediaHtml = `<div class="post-media-container"><video src="${post.media_url}" controls playsinline webkit-playsinline preload="metadata" class="post-media-video"></video></div>`;
+            const videoSrc = getValidVideoSrc(post);
+            const isWebm = (post.media_url && post.media_url.endsWith('.webm')) || (post.media_name && post.media_name.endsWith('.webm'));
+            const videoType = isWebm ? 'video/webm' : 'video/mp4';
+            mediaHtml = `
+                <div class="post-media-container video-post-wrapper">
+                    <video controls playsinline webkit-playsinline preload="metadata" class="post-media-video">
+                        <source src="${videoSrc}" type="${videoType}">
+                        Trình duyệt của bạn không hỗ trợ phát thẻ video này.
+                    </video>
+                </div>
+            `;
         } else if (post.media_type === 'audio') {
             mediaHtml = `
                 <div class="post-media-container">

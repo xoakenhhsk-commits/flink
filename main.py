@@ -880,13 +880,13 @@ async def create_post(
         filename = media.filename
         ext = os.path.splitext(filename)[1].lower()
 
-        if ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+        if ext in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".svg"]:
             media_type = "image"
             subfolder = "images"
-        elif ext in [".mp4", ".webm", ".mov", ".mkv"]:
+        elif ext in [".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".3gp", ".ts", ".ogv"]:
             media_type = "video"
             subfolder = "videos"
-        elif ext in [".mp3", ".wav", ".ogg", ".m4a"]:
+        elif ext in [".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"]:
             media_type = "audio"
             subfolder = "audio"
         else:
@@ -897,9 +897,11 @@ async def create_post(
         media_url = str(saved_media)
         media_name = filename
 
-        # Lưu bản sao Data URL vĩnh viễn trực tiếp vào cơ sở dữ liệu đối với hình ảnh
-        # Đối với video/audio: BẮT BUỘC dùng URL /uploads/... để trình duyệt phát streaming HTTP 206 Partial Content mượt mà trên iPhone/Android/PC
+        # Lưu bản sao Data URL vĩnh viễn trực tiếp vào CSDL cho cả hình ảnh và video/audio (< 4.5MB)
+        # Giúp dữ liệu lưu vĩnh viễn trong CSDL và phát ngay qua Blob URL không lo mất file trên Serverless
         if media_type == "image":
+            media_data = saved_media.data_url
+        elif media_type in ["video", "audio"] and len(saved_media.file_bytes) < 4500000:
             media_data = saved_media.data_url
         else:
             media_data = ""
@@ -920,7 +922,7 @@ async def create_post(
     return JSONResponse(content={
         "status": "ok", 
         "post_id": post_id, 
-        "media_url": (media_data if media_type == "image" else media_url),
+        "media_url": media_url,
         "media_data": media_data,
         "media_type": media_type,
         "media_name": media_name,
