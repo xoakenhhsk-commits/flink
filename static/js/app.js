@@ -1026,6 +1026,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Hàm tải lên tệp lớn theo từng phân đoạn (Chunked Upload) cho video dung lượng lớn 10MB - 100MB+ không giới hạn
+    async function uploadLargeFileInChunks(file, onProgress) {
+        const chunkSize = 2.5 * 1024 * 1024; // 2.5MB per chunk (an toàn tuyệt đối dưới trần 4.5MB của Vercel)
+        const totalChunks = Math.ceil(file.size / chunkSize);
+        const uploadId = 'up_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+
+        let finalData = null;
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const chunkBlob = file.slice(start, end);
+
+            const chunkFd = new FormData();
+            chunkFd.append('upload_id', uploadId);
+            chunkFd.append('chunk_index', i);
+            chunkFd.append('total_chunks', totalChunks);
+            chunkFd.append('filename', file.name);
+            chunkFd.append('chunk', chunkBlob, file.name);
+
+            if (onProgress) {
+                const percent = Math.round(((i + 1) / totalChunks) * 100);
+                onProgress(percent, i + 1, totalChunks);
+            }
+
+            const res = await apiFetch('/api/upload/chunk', { method: 'POST', body: chunkFd });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Lỗi khi tải lên phân đoạn video');
+
+            if (data.status === 'complete') {
+                finalData = data;
+            }
+        }
+        return finalData;
+    }
+
     publishPostBtn.addEventListener('click', async () => {
         if (!currentUser) return openAuth('login');
         const content = quickPostText.value.trim();
@@ -1036,38 +1071,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         publishPostBtn.disabled = true;
-        publishPostBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang đăng...';
+        publishPostBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang chuẩn bị...';
 
         try {
             let fileToUpload = currentMediaFile;
             const fileName = (currentMediaFile ? currentMediaFile.name : '').toLowerCase();
             const fileMime = (currentMediaFile ? currentMediaFile.type : '');
             const isImage = currentMediaFile && (fileMime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(fileName));
-            const isVideo = currentMediaFile && (fileMime.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v|3gp)$/i.test(fileName));
+            const isVideo = currentMediaFile && (fileMime.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v|3gp|ts|ogv)$/i.test(fileName));
+            const isAudio = currentMediaFile && (fileMime.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(fileName));
+
+            let preUploadedMedia = null;
 
             // 1. Tự động nén ảnh chất lượng cao để dung lượng còn ~150KB, đăng tức thì
             if (isImage) {
                 fileToUpload = await compressImageFile(currentMediaFile);
             }
-            // 2. Kiểm tra dung lượng video nếu đang chạy trên Vercel Serverless
-            else if (isVideo) {
-                const isVercelHost = window.location.hostname.includes('vercel.app');
-                const maxSize = isVercelHost ? (4.5 * 1024 * 1024) : (50 * 1024 * 1024);
-                if (currentMediaFile.size > maxSize) {
-                    publishPostBtn.disabled = false;
-                    publishPostBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Đăng';
-                    const maxMB = isVercelHost ? '4.5MB' : '50MB';
-                    return alert(`⚠️ Video dung lượng ${(currentMediaFile.size / 1024 / 1024).toFixed(1)}MB vượt quá giới hạn ${maxMB}.\n\nVui lòng chọn video ngắn hơn hoặc nén video dưới ${maxMB} để đăng thành công!`);
-                }
+            // 2. Video hoặc Audio dung lượng lớn (> 3.5MB): Tự động chia nhỏ thành các phân đoạn (Chunked Upload)
+            else if ((isVideo || isAudio) && currentMediaFile && currentMediaFile.size > 3.5 * 1024 * 1024) {
+                publishPostBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang tải video: 0%...';
+                preUploadedMedia = await uploadLargeFileInChunks(currentMediaFile, (pct, current, total) => {
+                    publishPostBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang tải video: ${pct}% (${current}/${total})...`;
+                });
             }
 
             const formData = new FormData();
             formData.append('content', content);
             formData.append('privacy', privacy);
-            if (fileToUpload) {
+
+            if (preUploadedMedia) {
+                // Đã upload chunk xong, truyền metadata để tạo bài viết ngay
+                formData.append('existing_media_url', preUploadedMedia.media_url);
+                formData.append('existing_media_data', preUploadedMedia.media_data || '');
+                formData.append('existing_media_type', preUploadedMedia.media_type || (isVideo ? 'video' : 'audio'));
+                formData.append('existing_media_name', preUploadedMedia.filename || currentMediaFile.name);
+            } else if (fileToUpload) {
                 formData.append('media', fileToUpload);
             }
 
+            publishPostBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang đăng bài...';
             const res = await apiFetch('/api/posts', { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Lỗi khi đăng bài');

@@ -42,6 +42,11 @@ class PostgresCursorWrapper:
             converted_sql = re.sub(r'INSERT\s+OR\s+REPLACE\s+INTO\s+media_storage', 'INSERT INTO media_storage', converted_sql, flags=re.IGNORECASE)
             converted_sql += ' ON CONFLICT (file_path) DO UPDATE SET data = EXCLUDED.data, content_type = EXCLUDED.content_type, file_size = EXCLUDED.file_size'
 
+        # Đổi INSERT OR REPLACE INTO upload_chunks
+        if re.search(r'INSERT\s+OR\s+REPLACE\s+INTO\s+upload_chunks', converted_sql, re.IGNORECASE):
+            converted_sql = re.sub(r'INSERT\s+OR\s+REPLACE\s+INTO\s+upload_chunks', 'INSERT INTO upload_chunks', converted_sql, flags=re.IGNORECASE)
+            converted_sql += ' ON CONFLICT (upload_id, chunk_index) DO UPDATE SET data = EXCLUDED.data'
+
         # Đổi BLOB -> BYTEA
         converted_sql = re.sub(r'\bBLOB\b', 'BYTEA', converted_sql, flags=re.IGNORECASE)
 
@@ -294,6 +299,17 @@ def init_db():
         data BLOB,
         file_size INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    # Bảng phân đoạn tải lên (Chunked Upload cho video dung lượng lớn)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS upload_chunks (
+        upload_id TEXT,
+        chunk_index INTEGER,
+        total_chunks INTEGER,
+        data BLOB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (upload_id, chunk_index)
     )
     """)
 

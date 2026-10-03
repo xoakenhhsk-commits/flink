@@ -860,12 +860,99 @@ async def get_realtime_posts(
         new_posts.append(d)
     return JSONResponse(content={"new_posts": new_posts, "count": len(new_posts)})
 
+# --- CHUNKED UPLOAD API (HỖ TRỢ ĐĂNG VIDEO DUNG LƯỢNG LỚN 10MB - 100MB+ KHÔNG BỊ GIỚI HẠN VERCEL) ---
+@app.post("/api/upload/chunk")
+async def upload_chunk(
+    request: Request,
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    filename: str = Form(...),
+    chunk: UploadFile = File(...)
+):
+    user = require_current_user(request)
+    chunk_bytes = await chunk.read()
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS upload_chunks (
+            upload_id TEXT,
+            chunk_index INTEGER,
+            total_chunks INTEGER,
+            data BLOB,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (upload_id, chunk_index)
+        )
+    """)
+    cursor.execute("""
+        INSERT OR REPLACE INTO upload_chunks (upload_id, chunk_index, total_chunks, data)
+        VALUES (?, ?, ?, ?)
+    """, (upload_id, chunk_index, total_chunks, chunk_bytes))
+    conn.commit()
+
+    # Kiểm tra xem đã nhận đủ tất cả các chunk chưa
+    cursor.execute("SELECT COUNT(*) as count FROM upload_chunks WHERE upload_id = ?", (upload_id,))
+    count_row = cursor.fetchone()
+    received_count = count_row["count"] if count_row else 0
+
+    if received_count >= total_chunks:
+        # Hợp nhất tất cả các chunk theo đúng thứ tự chunk_index
+        cursor.execute("SELECT chunk_index, data FROM upload_chunks WHERE upload_id = ? ORDER BY chunk_index ASC", (upload_id,))
+        rows = cursor.fetchall()
+        full_bytes = b"".join(bytes(r["data"]) for r in rows)
+
+        # Xóa các chunk tạm sau khi ghép thành công
+        cursor.execute("DELETE FROM upload_chunks WHERE upload_id = ?", (upload_id,))
+        conn.commit()
+        conn.close()
+
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in [".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".3gp", ".ts", ".ogv"]:
+            subfolder = "videos"
+            default_mime = "video/mp4"
+        elif ext in [".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac"]:
+            subfolder = "audio"
+            default_mime = "audio/mpeg"
+        else:
+            subfolder = "images"
+            default_mime = "image/jpeg"
+
+        import mimetypes
+        content_type = mimetypes.guess_type(filename)[0] or default_mime
+        saved_media = save_media_to_storage(subfolder, filename, full_bytes, content_type)
+        media_url = str(saved_media)
+
+        # Nếu video nhỏ hơn 4.5MB thì sinh data_url để phát tức thì 0ms
+        media_data = saved_media.data_url if len(full_bytes) < 4500000 else ""
+
+        return JSONResponse(content={
+            "status": "complete",
+            "media_url": media_url,
+            "media_data": media_data,
+            "media_type": "video" if subfolder == "videos" else ("audio" if subfolder == "audio" else "image"),
+            "filename": filename,
+            "file_size": len(full_bytes)
+        })
+
+    conn.close()
+    return JSONResponse(content={
+        "status": "chunk_received",
+        "chunk_index": chunk_index,
+        "received_chunks": received_count,
+        "total_chunks": total_chunks
+    })
+
 @app.post("/api/posts")
 async def create_post(
     request: Request,
     content: str = Form(""),
     privacy: str = Form("public"),
-    media: UploadFile = File(None)
+    media: UploadFile = File(None),
+    existing_media_url: str = Form(""),
+    existing_media_data: str = Form(""),
+    existing_media_type: str = Form(""),
+    existing_media_name: str = Form("")
 ):
     user = require_current_user(request)
     media_type = "none"
@@ -876,7 +963,13 @@ async def create_post(
     if privacy not in ["public", "private"]:
         privacy = "public"
 
-    if media and media.filename:
+    # Nếu đã tải lên qua Chunked Upload (cho video lớn)
+    if existing_media_url:
+        media_url = existing_media_url
+        media_data = existing_media_data
+        media_type = existing_media_type or "video"
+        media_name = existing_media_name
+    elif media and media.filename:
         filename = media.filename
         ext = os.path.splitext(filename)[1].lower()
 
