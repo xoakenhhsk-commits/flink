@@ -930,14 +930,20 @@ document.addEventListener('DOMContentLoaded', () => {
         quickMediaPreview.style.display = 'block';
         mediaPreviewContent.innerHTML = '';
         const url = URL.createObjectURL(file);
+        const name = (file.name || '').toLowerCase();
+        const type = file.type || '';
 
-        if (file.type.startsWith('image/')) {
+        const isImage = type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|bmp|svg)$/i.test(name);
+        const isVideo = type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v|3gp)$/i.test(name);
+        const isAudio = type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(name);
+
+        if (isImage) {
             mediaPreviewContent.innerHTML = `<img src="${url}" style="max-height: 240px; border-radius: 8px; object-fit: contain; cursor: zoom-in;" title="Nhấp để xem ảnh đầy đủ">`;
             const pImg = mediaPreviewContent.querySelector('img');
             if (pImg) pImg.onclick = () => openImageLightbox(url, 'Xem trước ảnh tải lên');
-        } else if (file.type.startsWith('video/')) {
+        } else if (isVideo) {
             mediaPreviewContent.innerHTML = `<video src="${url}" controls playsinline webkit-playsinline style="max-height: 240px; border-radius: 8px; width: 100%;"></video>`;
-        } else if (file.type.startsWith('audio/')) {
+        } else if (isAudio) {
             mediaPreviewContent.innerHTML = `
                 <div style="padding: 16px; background: rgba(99, 102, 241, 0.15); border-radius: 8px;">
                     <div style="margin-bottom: 8px; font-weight: 700; color: #a855f7;"><i class="fa-solid fa-music"></i> ${file.name}</div>
@@ -1034,17 +1040,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             let fileToUpload = currentMediaFile;
+            const fileName = (currentMediaFile ? currentMediaFile.name : '').toLowerCase();
+            const fileMime = (currentMediaFile ? currentMediaFile.type : '');
+            const isImage = currentMediaFile && (fileMime.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(fileName));
+            const isVideo = currentMediaFile && (fileMime.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi|m4v|3gp)$/i.test(fileName));
 
             // 1. Tự động nén ảnh chất lượng cao để dung lượng còn ~150KB, đăng tức thì
-            if (currentMediaFile && currentMediaFile.type.startsWith('image/')) {
+            if (isImage) {
                 fileToUpload = await compressImageFile(currentMediaFile);
             }
-            // 2. Kiểm tra dung lượng video trước khi gửi lên Vercel Serverless
-            else if (currentMediaFile && currentMediaFile.type.startsWith('video/')) {
-                if (currentMediaFile.size > 4.5 * 1024 * 1024) {
+            // 2. Kiểm tra dung lượng video nếu đang chạy trên Vercel Serverless
+            else if (isVideo) {
+                const isVercelHost = window.location.hostname.includes('vercel.app');
+                const maxSize = isVercelHost ? (4.5 * 1024 * 1024) : (50 * 1024 * 1024);
+                if (currentMediaFile.size > maxSize) {
                     publishPostBtn.disabled = false;
                     publishPostBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Đăng';
-                    return alert(`⚠️ Video dung lượng ${(currentMediaFile.size / 1024 / 1024).toFixed(1)}MB vượt quá giới hạn 4.5MB của serverless.\n\nVui lòng chọn video ngắn hơn hoặc nén video dưới 4.5MB để đăng thành công!`);
+                    const maxMB = isVercelHost ? '4.5MB' : '50MB';
+                    return alert(`⚠️ Video dung lượng ${(currentMediaFile.size / 1024 / 1024).toFixed(1)}MB vượt quá giới hạn ${maxMB}.\n\nVui lòng chọn video ngắn hơn hoặc nén video dưới ${maxMB} để đăng thành công!`);
                 }
             }
 
@@ -1059,6 +1072,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Lỗi khi đăng bài');
 
+            const detectedMediaType = data.media_type || (isVideo ? 'video' : isImage ? 'image' : 'audio');
+            const mediaUrl = data.media_url || (fileToUpload ? URL.createObjectURL(fileToUpload) : '');
+
             // Tạo object bài viết đầy đủ để lưu vào Local Vault và hiển thị tức thì 0ms
             const newPostObj = {
                 id: data.post_id,
@@ -1069,8 +1085,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 role: currentUser.role,
                 is_verified: currentUser.is_verified || 0,
                 content: content,
-                media_type: data.media_type || (fileToUpload ? (fileToUpload.type.startsWith('image/') ? 'image' : fileToUpload.type.startsWith('video/') ? 'video' : 'audio') : 'none'),
-                media_url: data.media_url || (fileToUpload ? URL.createObjectURL(fileToUpload) : ''),
+                media_type: detectedMediaType,
+                media_url: mediaUrl,
                 media_name: data.media_name || (fileToUpload ? fileToUpload.name : ''),
                 privacy: privacy,
                 views_count: 0,

@@ -142,7 +142,7 @@ SELECT setval(pg_get_serial_sequence('users', 'id'), coalesce(max(id), 1)) FROM 
 INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (4, 1, '', 'video', '/uploads/videos/7c2749531868d036_1790932159.mp4', '5920.mp4', 6, '2026-10-02 09:09:19', 'public', '');
 INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (6, 1, '', 'audio', '/uploads/audio/e2f240257cf87bf7_1790932522.mp3', '🎬 ណូយ វ៉ាន់ណេត ជ្រើសរើសបទចាស់ៗពិរោះៗ  Noy Vanneth Collection Nonstop Old Song - Lida Somaly (youtube).mp3', 2, '2026-10-02 09:15:22', 'private', '');
 INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (7, 3, 'Nhạc khmer #nhackhmer', 'video', '/uploads/videos/ee947d309a51256a_1790935523.mp4', '5530.mp4', 7, '2026-10-02 10:05:23', 'public', '');
-INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (8, 3, 'Triệu view #nhac2026', 'video', '/uploads/videos/8c6fc0f29853d08d_1790940127.mp4', '5905.mp4', 2, '2026-10-02 11:22:08', 'public', '');
+INSERT INTO posts (id, user_id, content, media_type, media_url, media_name, views_count, created_at, privacy, media_data) VALUES (8, 3, 'Triệu view #nhac2026', 'video', '/uploads/videos/ee947d309a51256a_1790935523.mp4', '5905.mp4', 2, '2026-10-02 11:22:08', 'public', '');
 SELECT setval(pg_get_serial_sequence('posts', 'id'), coalesce(max(id), 1)) FROM posts;
 
 -- DATA FOR post_views (34 rows)
@@ -213,7 +213,7 @@ INSERT INTO follows (id, follower_id, followed_id, created_at) VALUES (5, 4, 3, 
 INSERT INTO follows (id, follower_id, followed_id, created_at) VALUES (6, 6, 5, '2026-10-02 11:08:49');
 SELECT setval(pg_get_serial_sequence('follows', 'id'), coalesce(max(id), 1)) FROM follows;
 
--- DATA FOR sessions (21 rows)
+-- DATA FOR sessions (23 rows)
 INSERT INTO sessions (token, user_id, created_at) VALUES ('c939970066e34730809899d9d42452c428233e3f8f3b9c3be111828e2d9feb29', 1, '2026-10-02 07:55:19');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('a59227b9dca99fb222c578470fef1bbe183918cc964cc0d0895b1df9aa987dab', 1, '2026-10-02 09:07:53');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('b80155f51e5fede0ae5bd1c8325c1b6e2110ede8904ebd175b168519b6de7e06', 1, '2026-10-02 10:00:12');
@@ -235,6 +235,8 @@ INSERT INTO sessions (token, user_id, created_at) VALUES ('47f2789a94f6a067859da
 INSERT INTO sessions (token, user_id, created_at) VALUES ('cd4abc23afb8f5885450649eff8f008a6656908294b8ee0107bdfc60430b4b98', 3, '2026-10-02 11:20:19');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('7f34d073a5e2e27c611fd9fa8e76699985cec63af1da75a60c083bcaaf85896c', 3, '2026-10-02 11:20:19');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('1:1790986288:566b7c8a82e3b321f259f10ed32b1fa3:c6ecdb46e317b8e933a36c0eb7122204bd73decd4bc48e28435f712cff8fbcf3', 1, '2026-10-03 07:11:28');
+INSERT INTO sessions (token, user_id, created_at) VALUES ('1:1790993596:7f16256b34e711c79fa46db02125f956:f2772abd42cb5545569a6900d95e11f543a548047994202fce9f319593a354bd', 1, '2026-10-03 09:13:16');
+INSERT INTO sessions (token, user_id, created_at) VALUES ('1:1790993988:1cfad44d0ef7b301a947914c161ae891:437aabdabb4da1a12d3877e193a5514e959c052a703a99430057b468ae3bb82a', 1, '2026-10-03 09:19:48');
 -- DATA FOR site_settings (5 rows)
 INSERT INTO site_settings (key, value) VALUES ('site_name', 'FLINK');
 INSERT INTO site_settings (key, value) VALUES ('site_description', 'Mạng Xã Hội Thế Hệ Mới — Đẳng Cấp & Tốc Độ');

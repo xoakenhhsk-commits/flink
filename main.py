@@ -231,6 +231,28 @@ async def serve_upload_file(request: Request, subfolder: str, filename: str):
     if not file_data:
         raise HTTPException(status_code=404, detail="Tệp không tồn tại")
 
+    # Đảm bảo Content-Type chuẩn cho Video & Audio (tránh lỗi trình duyệt từ chối phát application/octet-stream)
+    ext = os.path.splitext(filename)[1].lower()
+    if not content_type or content_type == "application/octet-stream":
+        if ext == ".mp4":
+            content_type = "video/mp4"
+        elif ext == ".webm":
+            content_type = "video/webm"
+        elif ext in [".mov", ".quicktime"]:
+            content_type = "video/mp4"
+        elif ext in [".mp3"]:
+            content_type = "audio/mpeg"
+        elif ext in [".ogg"]:
+            content_type = "audio/ogg"
+        elif ext in [".wav"]:
+            content_type = "audio/wav"
+        elif ext in [".jpg", ".jpeg"]:
+            content_type = "image/jpeg"
+        elif ext in [".png"]:
+            content_type = "image/png"
+        elif ext in [".webp"]:
+            content_type = "image/webp"
+
     total_size = len(file_data)
     range_header = request.headers.get("range") or request.headers.get("Range")
 
@@ -775,7 +797,8 @@ async def get_posts(
     posts = []
     for r in rows:
         d = dict(r)
-        if d.get("media_data"):
+        # Chỉ chuyển sang inline DataURL cho hình ảnh, video/audio phải giữ URL stream /uploads/...
+        if d.get("media_type") == "image" and d.get("media_data"):
             d["media_url"] = d["media_data"]
         posts.append(d)
     return JSONResponse(content={"posts": posts})
@@ -832,7 +855,7 @@ async def get_realtime_posts(
     new_posts = []
     for r in rows:
         d = dict(r)
-        if d.get("media_data"):
+        if d.get("media_type") == "image" and d.get("media_data"):
             d["media_url"] = d["media_data"]
         new_posts.append(d)
     return JSONResponse(content={"new_posts": new_posts, "count": len(new_posts)})
@@ -874,13 +897,12 @@ async def create_post(
         media_url = str(saved_media)
         media_name = filename
 
-        # Lưu bản sao Data URL vĩnh viễn trực tiếp vào cơ sở dữ liệu:
-        # Đối với ảnh: luôn lưu Data URL để tải tức thì 0ms, không phụ thuộc ổ đĩa
-        # Đối với video/audio < 3.5MB: lưu Data URL để xem ngay không lo mất file
+        # Lưu bản sao Data URL vĩnh viễn trực tiếp vào cơ sở dữ liệu đối với hình ảnh
+        # Đối với video/audio: BẮT BUỘC dùng URL /uploads/... để trình duyệt phát streaming HTTP 206 Partial Content mượt mà trên iPhone/Android/PC
         if media_type == "image":
             media_data = saved_media.data_url
-        elif media_type in ["video", "audio"] and len(saved_media.file_bytes) < 3500000:
-            media_data = saved_media.data_url
+        else:
+            media_data = ""
 
     if not content.strip() and media_type == "none":
         return JSONResponse(content={"error": "Nội dung bài viết hoặc tệp đính kèm không được để trống"}, status_code=400)
@@ -898,7 +920,7 @@ async def create_post(
     return JSONResponse(content={
         "status": "ok", 
         "post_id": post_id, 
-        "media_url": media_data or media_url,
+        "media_url": (media_data if media_type == "image" else media_url),
         "media_data": media_data,
         "media_type": media_type,
         "media_name": media_name,
