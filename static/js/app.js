@@ -999,9 +999,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }, { threshold: 0.5 });
 
+    // Helper quản lý danh sách bài viết đã xóa trên máy khách
+    function markPostAsDeleted(postId) {
+        try {
+            let deleted = JSON.parse(localStorage.getItem('lumina_deleted_post_ids') || '[]');
+            const sId = String(postId);
+            if (!deleted.includes(sId)) {
+                deleted.push(sId);
+                localStorage.setItem('lumina_deleted_post_ids', JSON.stringify(deleted));
+            }
+        } catch (e) {}
+    }
+
+    function isPostDeleted(postId) {
+        try {
+            let deleted = JSON.parse(localStorage.getItem('lumina_deleted_post_ids') || '[]');
+            return deleted.includes(String(postId)) || deleted.includes(Number(postId));
+        } catch (e) {
+            return false;
+        }
+    }
+
     function renderFeed(posts) {
         postsFeed.innerHTML = '';
-        if (posts.length === 0) {
+        const visiblePosts = (posts || []).filter(p => !isPostDeleted(p.id));
+        if (visiblePosts.length === 0) {
             postsFeed.innerHTML = `
                 <div class="glass-card" style="padding: 40px; text-align: center; color: var(--text-secondary);">
                     <i class="fa-solid fa-feather" style="font-size: 40px; margin-bottom: 12px; color: var(--primary);"></i>
@@ -1011,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        posts.forEach(post => {
+        visiblePosts.forEach(post => {
             const postCard = createPostCard(post);
             postsFeed.appendChild(postCard);
             postObserver.observe(postCard);
@@ -1023,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.className = 'post-card glass-card';
         card.dataset.postId = post.id;
 
-        const isAuthor = currentUser && currentUser.id === post.user_id;
+        const isAuthor = currentUser && (String(currentUser.id) === String(post.user_id));
         const isAdmin = currentUser && currentUser.role === 'admin';
         const canDelete = isAuthor || isAdmin;
 
@@ -1145,12 +1167,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (canDelete) {
             const delBtn = card.querySelector('.delete-post-btn');
             delBtn.addEventListener('click', async () => {
-                if (!confirm('Bạn có chắc chắn muốn xóa bài viết này không?')) return;
+                if (!confirm('Bạn có chắc chắn muốn xóa bài viết này không? Bài viết sẽ không còn hiển thị.')) return;
                 try {
                     const res = await apiFetch(`/api/posts/${post.id}`, { method: 'DELETE' });
                     if (res.ok) {
-                        card.remove();
+                        markPostAsDeleted(post.id);
+                        document.querySelectorAll(`.post-card[data-post-id="${post.id}"]`).forEach(el => el.remove());
                         loadTrending();
+                        if (profilePostsCount && isAuthor) {
+                            const curCount = parseInt(profilePostsCount.textContent) || 0;
+                            profilePostsCount.textContent = Math.max(0, curCount - 1);
+                        }
                         showToast('Đã xóa bài viết thành công!');
                     } else {
                         const err = await res.json().catch(() => ({}));
@@ -1369,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await apiFetch(url);
             const data = await res.json();
             userPostsFeed.innerHTML = '';
-            const posts = data.posts || [];
+            const posts = (data.posts || []).filter(p => !isPostDeleted(p.id));
             if (posts.length === 0) {
                 let emptyMsg = 'Chưa có bài viết nào.';
                 if (tab === 'media') emptyMsg = 'Chưa có ảnh hoặc video nào được đăng.';

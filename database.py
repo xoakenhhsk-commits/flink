@@ -265,6 +265,14 @@ def init_db():
     )
     """)
 
+    # Bảng lưu ID bài viết đã xóa (đảm bảo không bao giờ hiển thị lại)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS deleted_posts (
+        post_id INTEGER PRIMARY KEY,
+        deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # Bảng Cấu hình Thương hiệu & Tên Website / Logo
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS site_settings (

@@ -512,8 +512,12 @@ async def get_posts(
     offset = (page - 1) * limit
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("CREATE TABLE IF NOT EXISTS deleted_posts (post_id INTEGER PRIMARY KEY, deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
 
-    where_clauses = []
+    where_clauses = [
+        "u.is_active = 1",
+        "p.id NOT IN (SELECT post_id FROM deleted_posts)"
+    ]
     where_params = []
 
     # Kiểm tra quyền riêng tư (Privacy)
@@ -754,10 +758,13 @@ async def delete_post(post_id: int, request: Request):
     conn = get_db()
     cursor = conn.cursor()
     try:
+        cursor.execute("CREATE TABLE IF NOT EXISTS deleted_posts (post_id INTEGER PRIMARY KEY, deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         cursor.execute("SELECT id, user_id, media_url FROM posts WHERE id = ?", (post_id,))
         post = cursor.fetchone()
         if not post:
-            return JSONResponse(content={"error": "Bài viết không tồn tại hoặc đã bị xóa trước đó"}, status_code=404)
+            cursor.execute("INSERT OR IGNORE INTO deleted_posts (post_id) VALUES (?)", (post_id,))
+            conn.commit()
+            return JSONResponse(content={"status": "ok", "message": "Bài viết đã bị xóa trước đó"})
 
         # Kiểm tra quyền: tác giả bài viết hoặc admin
         is_owner = int(post["user_id"]) == int(user["id"])
@@ -775,7 +782,11 @@ async def delete_post(post_id: int, request: Request):
                 except Exception:
                     pass
 
+        # Ghi nhận bài viết vào danh sách xóa vĩnh viễn (chắc chắn không bao giờ load lại)
+        cursor.execute("INSERT OR IGNORE INTO deleted_posts (post_id) VALUES (?)", (post_id,))
+
         # Xóa sạch các bảng phụ thuộc trước để tránh lỗi Foreign Key
+        cursor.execute("UPDATE comments SET parent_id = NULL WHERE post_id = ?", (post_id,))
         cursor.execute("DELETE FROM post_likes WHERE post_id = ?", (post_id,))
         cursor.execute("DELETE FROM post_views WHERE post_id = ?", (post_id,))
         cursor.execute("DELETE FROM comments WHERE post_id = ?", (post_id,))
