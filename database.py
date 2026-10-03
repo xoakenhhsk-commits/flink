@@ -285,6 +285,17 @@ def init_db():
     )
     """)
 
+    # Bảng lưu trữ tệp đa phương tiện vĩnh viễn (Media Storage)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS media_storage (
+        file_path TEXT PRIMARY KEY,
+        content_type TEXT NOT NULL,
+        data BLOB,
+        file_size INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # Bảng Cấu hình Thương hiệu & Tên Website / Logo
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS site_settings (

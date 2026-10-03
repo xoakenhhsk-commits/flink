@@ -63,6 +63,37 @@ def save_media_to_storage(subfolder: str, filename: str, file_bytes: bytes, cont
         import mimetypes
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
+    # Tối ưu hóa nén ảnh bằng Pillow để giảm dung lượng file (tránh quá tải và giúp lưu vào DB cực nhanh)
+    if ext in [".jpg", ".jpeg", ".png", ".webp"] or (content_type and content_type.startswith("image/")):
+        try:
+            from PIL import Image, ImageOps
+            img = Image.open(io.BytesIO(file_bytes))
+            # Auto-orient theo EXIF (rất quan trọng cho ảnh chụp từ iPhone)
+            img = ImageOps.exif_transpose(img)
+            # Giới hạn kích thước tối đa 1600px để tối ưu dung lượng và tốc độ tải
+            max_dimension = 1600
+            if img.width > max_dimension or img.height > max_dimension:
+                img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+
+            buf = io.BytesIO()
+            if img.mode in ("RGBA", "P"):
+                if ext == ".png":
+                    img.save(buf, format="PNG", optimize=True)
+                    content_type = "image/png"
+                else:
+                    img = img.convert("RGB")
+                    img.save(buf, format="JPEG", quality=82, optimize=True)
+                    content_type = "image/jpeg"
+                    ext = ".jpg"
+            else:
+                img = img.convert("RGB")
+                img.save(buf, format="JPEG", quality=82, optimize=True)
+                content_type = "image/jpeg"
+                ext = ".jpg"
+            file_bytes = buf.getvalue()
+        except Exception as img_err:
+            print("Pillow image optimization note:", img_err)
+
     saved_filename = f"{secrets.token_hex(8)}_{int(datetime.now().timestamp())}{ext}"
     rel_url = f"/uploads/{subfolder}/{saved_filename}"
 
@@ -144,35 +175,85 @@ except Exception:
     pass
 
 @app.get("/uploads/{subfolder}/{filename}")
-async def serve_upload_file(subfolder: str, filename: str):
+async def serve_upload_file(request: Request, subfolder: str, filename: str):
     rel_url = f"/uploads/{subfolder}/{filename}"
     disk_path = os.path.join(UPLOAD_DIR, subfolder, filename)
 
+    content_type = None
+    file_data = None
+
     # 1. Nếu có sẵn trên ổ đĩa cache
     if os.path.exists(disk_path):
-        return FileResponse(disk_path)
+        try:
+            with open(disk_path, "rb") as f:
+                file_data = f.read()
+            import mimetypes
+            content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        except Exception:
+            file_data = None
 
     # 2. Nếu ổ đĩa bị Vercel xóa tạm, lấy trực tiếp từ CƠ SỞ DỮ LIỆU
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT content_type, data FROM media_storage WHERE file_path = ?", (rel_url,))
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            content_type = row["content_type"] or "application/octet-stream"
-            file_data = bytes(row["data"])
-            try:
-                os.makedirs(os.path.dirname(disk_path), exist_ok=True)
-                with open(disk_path, "wb") as f:
-                    f.write(file_data)
-            except Exception:
-                pass
-            return Response(content=file_data, media_type=content_type, headers={"Cache-Control": "public, max-age=31536000"})
-    except Exception as e:
-        print("Lỗi tải media từ CSDL:", e)
+    if not file_data:
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT content_type, data FROM media_storage WHERE file_path = ? OR file_path LIKE ?", (rel_url, f"%{filename}"))
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                content_type = row["content_type"] or "application/octet-stream"
+                file_data = bytes(row["data"])
+                try:
+                    os.makedirs(os.path.dirname(disk_path), exist_ok=True)
+                    with open(disk_path, "wb") as f:
+                        f.write(file_data)
+                except Exception:
+                    pass
+        except Exception as e:
+            print("Lỗi tải media từ CSDL:", e)
 
-    raise HTTPException(status_code=404, detail="Tệp không tồn tại")
+    if not file_data:
+        raise HTTPException(status_code=404, detail="Tệp không tồn tại")
+
+    total_size = len(file_data)
+    range_header = request.headers.get("range") or request.headers.get("Range")
+
+    # Hỗ trợ chuẩn HTTP 206 Partial Content (Range requests) đặc biệt quan trọng cho iPhone Safari phát Video/Audio mượt mà
+    if range_header and range_header.startswith("bytes="):
+        try:
+            ranges = range_header.replace("bytes=", "").split("-")
+            start = int(ranges[0]) if ranges[0] else 0
+            end = int(ranges[1]) if len(ranges) > 1 and ranges[1] else total_size - 1
+            if start >= total_size:
+                start = 0
+            if end >= total_size:
+                end = total_size - 1
+            chunk_length = end - start + 1
+            chunk_data = file_data[start:end+1]
+
+            return Response(
+                content=chunk_data,
+                status_code=206,
+                media_type=content_type,
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{total_size}",
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(chunk_length),
+                    "Cache-Control": "public, max-age=31536000"
+                }
+            )
+        except Exception as e:
+            print("Range parse note:", e)
+
+    return Response(
+        content=file_data,
+        media_type=content_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(total_size),
+            "Cache-Control": "public, max-age=31536000"
+        }
+    )
 
 # --- AUTH HELPER & CRYPTOGRAPHIC SESSION TOKENS ---
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "lumina_social_super_secure_secret_key_2026")

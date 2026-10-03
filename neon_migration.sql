@@ -212,7 +212,7 @@ INSERT INTO follows (id, follower_id, followed_id, created_at) VALUES (5, 4, 3, 
 INSERT INTO follows (id, follower_id, followed_id, created_at) VALUES (6, 6, 5, '2026-10-02 11:08:49');
 SELECT setval(pg_get_serial_sequence('follows', 'id'), coalesce(max(id), 1)) FROM follows;
 
--- DATA FOR sessions (20 rows)
+-- DATA FOR sessions (21 rows)
 INSERT INTO sessions (token, user_id, created_at) VALUES ('c939970066e34730809899d9d42452c428233e3f8f3b9c3be111828e2d9feb29', 1, '2026-10-02 07:55:19');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('a59227b9dca99fb222c578470fef1bbe183918cc964cc0d0895b1df9aa987dab', 1, '2026-10-02 09:07:53');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('b80155f51e5fede0ae5bd1c8325c1b6e2110ede8904ebd175b168519b6de7e06', 1, '2026-10-02 10:00:12');
@@ -233,6 +233,7 @@ INSERT INTO sessions (token, user_id, created_at) VALUES ('810d6ee64d97116a8a94c
 INSERT INTO sessions (token, user_id, created_at) VALUES ('47f2789a94f6a067859da3df7245c6837b174d6f2e786e25bbc018c0703e4ca6', 6, '2026-10-02 11:08:49');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('cd4abc23afb8f5885450649eff8f008a6656908294b8ee0107bdfc60430b4b98', 3, '2026-10-02 11:20:19');
 INSERT INTO sessions (token, user_id, created_at) VALUES ('7f34d073a5e2e27c611fd9fa8e76699985cec63af1da75a60c083bcaaf85896c', 3, '2026-10-02 11:20:19');
+INSERT INTO sessions (token, user_id, created_at) VALUES ('1:1790986288:566b7c8a82e3b321f259f10ed32b1fa3:c6ecdb46e317b8e933a36c0eb7122204bd73decd4bc48e28435f712cff8fbcf3', 1, '2026-10-03 07:11:28');
 -- DATA FOR site_settings (5 rows)
 INSERT INTO site_settings (key, value) VALUES ('site_name', 'FLINK');
 INSERT INTO site_settings (key, value) VALUES ('site_description', 'Mạng Xã Hội Thế Hệ Mới — Đẳng Cấp & Tốc Độ');

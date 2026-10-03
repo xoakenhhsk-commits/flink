@@ -1038,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderFeed(posts) {
         postsFeed.innerHTML = '';
-        const visiblePosts = (posts || []).filter(p => !isPostDeleted(p.id));
+        const visiblePosts = posts || [];
         if (visiblePosts.length === 0) {
             postsFeed.innerHTML = `
                 <div class="glass-card" style="padding: 40px; text-align: center; color: var(--text-secondary);">

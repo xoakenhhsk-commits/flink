@@ -8,7 +8,8 @@
         "includeFiles": [
           "templates/**",
           "static/**",
-          "uploads/**"
+          "uploads/**",
+          "social.db"
         ]
       }
     }
